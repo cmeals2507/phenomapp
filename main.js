@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, dialog } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, Menu, shell } = require('electron');
 const path = require('path');
 const fs = require('fs');
 
@@ -43,6 +43,58 @@ function openDatabase(filePath) {
   currentDbPath = filePath;
 }
 
+function createAboutWindow() {
+  const win = new BrowserWindow({
+    width: 420,
+    height: 250,
+    resizable: false,
+    minimizable: false,
+    maximizable: false,
+    title: 'About PhenomApp',
+    webPreferences: {
+      nodeIntegration: false,
+      contextIsolation: true,
+    },
+  });
+  win.setMenu(null);
+  win.loadFile(path.join(__dirname, 'about.html'));
+  // Open all links in the default browser instead of navigating the window
+  win.webContents.on('will-navigate', (e, url) => {
+    e.preventDefault();
+    shell.openExternal(url);
+  });
+}
+
+function buildMenu() {
+  const template = [
+    {
+      label: app.name,
+      submenu: [
+        { label: `About ${app.name}`, click: () => createAboutWindow() },
+        { type: 'separator' },
+        { role: 'hide' },
+        { role: 'hideOthers' },
+        { role: 'unhide' },
+        { type: 'separator' },
+        { role: 'quit' },
+      ],
+    },
+    {
+      label: 'Edit',
+      submenu: [
+        { role: 'undo' },
+        { role: 'redo' },
+        { type: 'separator' },
+        { role: 'cut' },
+        { role: 'copy' },
+        { role: 'paste' },
+        { role: 'selectAll' },
+      ],
+    },
+  ];
+  Menu.setApplicationMenu(Menu.buildFromTemplate(template));
+}
+
 function createWindow() {
   mainWindow = new BrowserWindow({
     width: 1400,
@@ -85,6 +137,7 @@ app.whenReady().then(() => {
   openDatabase(initialPath);
 
   createWindow();
+  buildMenu();
   registerIPC();
 
   app.on('activate', () => {

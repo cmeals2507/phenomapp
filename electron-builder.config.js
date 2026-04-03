@@ -8,6 +8,7 @@ module.exports = {
     'dist/**',
     'main.js',
     'preload.js',
+    'about.html',
     'src/db/**',
     'src/utils/exportFormatters.js',
     'package.json',
