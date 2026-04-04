@@ -13,8 +13,11 @@ contextBridge.exposeInMainWorld('phenomAPI', {
   getMeaningUnits: (transcriptId) => ipcRenderer.invoke('meaning-units:getAll', transcriptId),
   addMeaningUnit: (data) => ipcRenderer.invoke('meaning-units:add', data),
   saveMeaningUnit: (mu) => ipcRenderer.invoke('meaning-units:save', mu),
+  saveMeaningUnitColor: (data) => ipcRenderer.invoke('meaning-units:saveColor', data),
   deleteMeaningUnit: (id) => ipcRenderer.invoke('meaning-units:delete', id),
   reorderMeaningUnits: (items) => ipcRenderer.invoke('meaning-units:reorder', items),
+
+  getHighlightData: (transcriptId) => ipcRenderer.invoke('meaning-units:getHighlightData', transcriptId),
 
   exportSingleCase: (transcriptId) => ipcRenderer.invoke('export:singleCase', transcriptId),
   exportCorpus: () => ipcRenderer.invoke('export:corpus'),

@@ -11,6 +11,7 @@ module.exports = {
     'about.html',
     'src/db/**',
     'src/utils/exportFormatters.js',
+    'src/utils/timestamps.js',
     'package.json',
   ],
   asar: true,

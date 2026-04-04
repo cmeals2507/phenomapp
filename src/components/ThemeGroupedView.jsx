@@ -1,0 +1,150 @@
+import React, { useState } from 'react';
+
+const CASE_SENSITIVE_NOTE = (
+  <p className="text-xs text-gray-400 mb-3">
+    Theme grouping is case-sensitive. "Belonging" and "belonging" are treated as different themes.
+  </p>
+);
+
+export default function ThemeGroupedView({ units, onCellChange }) {
+  const [collapsed, setCollapsed] = useState({});
+
+  const toggleCollapse = (key) => {
+    setCollapsed(prev => ({ ...prev, [key]: !prev[key] }));
+  };
+
+  if (units.length === 0) {
+    return (
+      <div className="flex items-center justify-center h-full text-gray-400 text-sm">
+        No meaning units found. Complete Stage 2 first.
+      </div>
+    );
+  }
+
+  // Group by provisional_theme (case-sensitive, per spec).
+  // Order: themes in order of first appearance (lowest mu_order), then Untagged at bottom.
+  const groups = new Map();
+  const untagged = [];
+
+  for (const mu of units) {
+    const label = mu.provisional_theme && mu.provisional_theme.trim() ? mu.provisional_theme : null;
+    if (!label) {
+      untagged.push(mu);
+    } else {
+      if (!groups.has(label)) groups.set(label, []);
+      groups.get(label).push(mu);
+    }
+  }
+
+  const hasContent = groups.size > 0 || untagged.length > 0;
+
+  if (groups.size === 0 && untagged.length > 0) {
+    // No themes defined yet — show guidance.
+    return (
+      <div className="h-full overflow-auto p-4">
+        {CASE_SENSITIVE_NOTE}
+        <p className="text-sm text-gray-400 text-center mt-8">
+          No themes defined yet. Switch to View 1 to begin tagging.
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="h-full overflow-auto p-3">
+      {CASE_SENSITIVE_NOTE}
+
+      <div className="space-y-3">
+        {/* Theme groups */}
+        {[...groups.entries()].map(([label, groupUnits]) => {
+          const color = groupUnits[0]?.theme_color || null;
+          const isCollapsed = collapsed[label];
+
+          return (
+            <div key={label} className="border border-gray-200 rounded">
+              {/* Block header */}
+              <button
+                type="button"
+                onClick={() => toggleCollapse(label)}
+                className="w-full flex items-center gap-2 px-3 py-2 bg-gray-50 hover:bg-gray-100 text-left rounded-t transition-colors"
+              >
+                <span className="text-xs text-gray-500">{isCollapsed ? '▶' : '▼'}</span>
+                {color && (
+                  <span
+                    className="inline-block w-3 h-3 rounded-full shrink-0 border border-gray-300"
+                    style={{ backgroundColor: color }}
+                  />
+                )}
+                <span className="text-xs font-medium text-gray-700 flex-1 truncate">{label}</span>
+                <span className="text-xs text-gray-400 shrink-0">({groupUnits.length})</span>
+              </button>
+
+              {/* Block body */}
+              {!isCollapsed && (
+                <div className="divide-y divide-gray-100">
+                  {groupUnits.map(mu => (
+                    <div key={mu.id} className="flex gap-0 text-xs">
+                      {/* Paraphrase (read-only, left half) */}
+                      <div className="w-1/2 p-2 text-gray-700 leading-relaxed border-r border-gray-100">
+                        {mu.paraphrase || <span className="text-gray-300 italic">—</span>}
+                      </div>
+
+                      {/* Stage 3 Notes (editable, right half) */}
+                      <div className="w-1/2 p-1">
+                        <textarea
+                          value={mu.stage3_notes || ''}
+                          onChange={e => onCellChange(mu.id, 'stage3_notes', e.target.value)}
+                          placeholder="Stage 3 notes..."
+                          rows={2}
+                          className="w-full text-xs p-1 resize-none focus:outline-none bg-transparent leading-relaxed"
+                        />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          );
+        })}
+
+        {/* Untagged block */}
+        {untagged.length > 0 && (
+          <div className="border border-gray-200 rounded">
+            <button
+              type="button"
+              onClick={() => toggleCollapse('__untagged__')}
+              className="w-full flex items-center gap-2 px-3 py-2 bg-gray-50 hover:bg-gray-100 text-left rounded-t transition-colors"
+            >
+              <span className="text-xs text-gray-500">
+                {collapsed['__untagged__'] ? '▶' : '▼'}
+              </span>
+              <span className="text-xs font-medium text-gray-400 flex-1">Untagged</span>
+              <span className="text-xs text-gray-400 shrink-0">({untagged.length})</span>
+            </button>
+
+            {!collapsed['__untagged__'] && (
+              <div className="divide-y divide-gray-100">
+                {untagged.map(mu => (
+                  <div key={mu.id} className="flex gap-0 text-xs">
+                    <div className="w-1/2 p-2 text-gray-700 leading-relaxed border-r border-gray-100">
+                      {mu.paraphrase || <span className="text-gray-300 italic">—</span>}
+                    </div>
+                    <div className="w-1/2 p-1">
+                      <textarea
+                        value={mu.stage3_notes || ''}
+                        onChange={e => onCellChange(mu.id, 'stage3_notes', e.target.value)}
+                        placeholder="Stage 3 notes..."
+                        rows={2}
+                        className="w-full text-xs p-1 resize-none focus:outline-none bg-transparent leading-relaxed"
+                      />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}

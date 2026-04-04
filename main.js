@@ -58,7 +58,6 @@ function createAboutWindow() {
   });
   win.setMenu(null);
   win.loadFile(path.join(__dirname, 'about.html'));
-  // Open all links in the default browser instead of navigating the window
   win.webContents.on('will-navigate', (e, url) => {
     e.preventDefault();
     shell.openExternal(url);
@@ -149,7 +148,30 @@ app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit();
 });
 
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+function nowParts() {
+  const now = new Date();
+  const date = now.getFullYear() +
+    '-' + String(now.getMonth() + 1).padStart(2, '0') +
+    '-' + String(now.getDate()).padStart(2, '0');
+  const time = String(now.getHours()).padStart(2, '0') +
+    ':' + String(now.getMinutes()).padStart(2, '0') +
+    ':' + String(now.getSeconds()).padStart(2, '0');
+  return { date, time };
+}
+
+// ---------------------------------------------------------------------------
+// IPC handlers
+// ---------------------------------------------------------------------------
+
 function registerIPC() {
+  const { updateDayStamps } = require('./src/utils/timestamps');
+
+  // --- File dialogs ---
+
   ipcMain.handle('dialog:openFile', async () => {
     const result = await dialog.showOpenDialog(mainWindow, {
       properties: ['openFile'],
@@ -158,6 +180,8 @@ function registerIPC() {
     if (result.canceled) return null;
     return result.filePaths[0];
   });
+
+  // --- Transcripts ---
 
   ipcMain.handle('transcripts:getAll', () => {
     return queries.getAllTranscripts();
@@ -183,30 +207,52 @@ function registerIPC() {
     return queries.getTranscript(transcriptId);
   });
 
+  // --- Stage outputs ---
+
   ipcMain.handle('stage:getOutput', (event, { transcriptId, stage }) => {
     return queries.getStageOutput(transcriptId, stage);
   });
 
   ipcMain.handle('stage:saveOutput', (event, { transcriptId, stage, content }) => {
     try {
-      queries.saveStageOutput(transcriptId, stage, content);
+      const existing = queries.getStageOutput(transcriptId, stage);
+      const { date, time } = nowParts();
+      const dayStamps = updateDayStamps(existing?.day_stamps, date, time);
+      queries.saveStageOutput(transcriptId, stage, content, dayStamps);
       return { success: true };
     } catch (err) {
       return { error: err.message };
     }
   });
 
+  // --- Meaning units ---
+
   ipcMain.handle('meaning-units:getAll', (event, transcriptId) => {
     return queries.getMeaningUnits(transcriptId);
   });
 
   ipcMain.handle('meaning-units:add', (event, { transcriptId, workflow }) => {
-    return queries.addMeaningUnit(transcriptId, workflow);
+    const { date, time } = nowParts();
+    const initialDayStamps = JSON.stringify([{ date, first_edited_at: time }]);
+    return queries.addMeaningUnit(transcriptId, workflow, initialDayStamps);
   });
 
   ipcMain.handle('meaning-units:save', (event, mu) => {
     try {
-      queries.saveMeaningUnit(mu);
+      const existing = queries.getMeaningUnitById(mu.id);
+      const { date, time } = nowParts();
+      const dayStamps = updateDayStamps(existing?.day_stamps, date, time);
+      queries.saveMeaningUnit({ ...mu, day_stamps: dayStamps });
+      return { success: true };
+    } catch (err) {
+      return { error: err.message };
+    }
+  });
+
+  // Immediate color save — does NOT update day_stamps (structural tag, not text entry).
+  ipcMain.handle('meaning-units:saveColor', (event, { id, theme_color }) => {
+    try {
+      queries.saveMeaningUnitColor({ id, theme_color });
       return { success: true };
     } catch (err) {
       return { error: err.message };
@@ -222,6 +268,12 @@ function registerIPC() {
     queries.reorderMeaningUnits(items);
     return { success: true };
   });
+
+  ipcMain.handle('meaning-units:getHighlightData', (event, transcriptId) => {
+    return queries.getHighlightData(transcriptId);
+  });
+
+  // --- Export ---
 
   ipcMain.handle('export:singleCase', async (event, transcriptId) => {
     const { formatSingleCase } = require('./src/utils/exportFormatters');
@@ -246,6 +298,33 @@ function registerIPC() {
       return { error: err.message };
     }
   });
+
+  ipcMain.handle('export:corpus', async () => {
+    const { formatCorpusStageOutputs, formatCorpusMeaningUnits } = require('./src/utils/exportFormatters');
+
+    const result = await dialog.showOpenDialog(mainWindow, {
+      properties: ['openDirectory', 'createDirectory'],
+      message: 'Select a folder to save the corpus export',
+    });
+
+    if (result.canceled) return { canceled: true };
+
+    const dir = result.filePaths[0];
+
+    try {
+      const allStageOutputs = queries.getAllStageOutputsForCorpus();
+      const allMeaningUnits = queries.getAllMeaningUnitsForCorpus();
+
+      fs.writeFileSync(path.join(dir, 'corpus_stage_outputs.csv'), formatCorpusStageOutputs(allStageOutputs), 'utf-8');
+      fs.writeFileSync(path.join(dir, 'corpus_meaning_units.csv'), formatCorpusMeaningUnits(allMeaningUnits), 'utf-8');
+
+      return { success: true };
+    } catch (err) {
+      return { error: err.message };
+    }
+  });
+
+  // --- Database ---
 
   ipcMain.handle('db:getPath', () => currentDbPath);
   ipcMain.handle('db:getDefaultPath', () => getDefaultDbPath());
@@ -288,34 +367,6 @@ function registerIPC() {
       openDatabase(defaultPath);
       saveSettings({ dbPath: defaultPath });
       return { success: true, path: defaultPath };
-    } catch (err) {
-      return { error: err.message };
-    }
-  });
-
-  ipcMain.handle('export:corpus', async () => {
-    const { formatCorpusStageOutputs, formatCorpusMeaningUnits } = require('./src/utils/exportFormatters');
-
-    const result = await dialog.showOpenDialog(mainWindow, {
-      properties: ['openDirectory', 'createDirectory'],
-      message: 'Select a folder to save the corpus export',
-    });
-
-    if (result.canceled) return { canceled: true };
-
-    const dir = result.filePaths[0];
-
-    try {
-      const allStageOutputs = queries.getAllStageOutputsForCorpus();
-      const allMeaningUnits = queries.getAllMeaningUnitsForCorpus();
-
-      const stageCsv = formatCorpusStageOutputs(allStageOutputs);
-      const muCsv = formatCorpusMeaningUnits(allMeaningUnits);
-
-      fs.writeFileSync(path.join(dir, 'corpus_stage_outputs.csv'), stageCsv, 'utf-8');
-      fs.writeFileSync(path.join(dir, 'corpus_meaning_units.csv'), muCsv, 'utf-8');
-
-      return { success: true };
     } catch (err) {
       return { error: err.message };
     }

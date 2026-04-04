@@ -1,13 +1,14 @@
 import React from 'react';
 import FreeformStage from './FreeformStage';
 import MeaningUnitsStage from './MeaningUnitsStage';
+import ProvisionalThemesStage from './ProvisionalThemesStage';
 
 const STAGES = [
-  { key: 'memo',         label: 'Holistic Memo',            index: 1 },
-  { key: 'meaning_units',label: 'Meaning Units',            index: 2 },
-  { key: 'themes',       label: 'Provisional Themes',       index: 3 },
-  { key: 'whole_part',   label: 'Whole-Part Reconciliation',index: 4 },
-  { key: 'essence',      label: 'Individual Essence',       index: 5 },
+  { key: 'memo',          label: 'Holistic Memo',             index: 1 },
+  { key: 'meaning_units', label: 'Meaning Units',             index: 2 },
+  { key: 'themes',        label: 'Provisional Themes',        index: 3 },
+  { key: 'whole_part',    label: 'Whole-Part Reconciliation', index: 4 },
+  { key: 'essence',       label: 'Individual Essence',        index: 5 },
 ];
 
 export default function StageArea({ transcript, openTabs, onTabClick }) {
@@ -49,6 +50,8 @@ export default function StageArea({ transcript, openTabs, onTabClick }) {
               >
                 {tabKey === 'meaning_units' ? (
                   <MeaningUnitsStage transcript={transcript} />
+                ) : tabKey === 'themes' ? (
+                  <ProvisionalThemesStage transcript={transcript} />
                 ) : (
                   <FreeformStage
                     transcript={transcript}
