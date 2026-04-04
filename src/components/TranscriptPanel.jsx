@@ -103,15 +103,17 @@ export default function TranscriptPanel({ transcript, width, onExport }) {
 
     const ranges = [];
     for (const item of data) {
-      const match = findExcerptInText(item.excerpt, transcript.raw_text);
-      if (match) {
-        ranges.push({
-          start: match.start,
-          end: match.end,
-          themeColor: item.theme_color || '#6366f1',
-          themeLabel: item.provisional_theme,
-          muOrder: item.mu_order,
-        });
+      const matches = findExcerptInText(item.excerpt, transcript.raw_text);
+      if (matches) {
+        for (const match of matches) {
+          ranges.push({
+            start: match.start,
+            end: match.end,
+            themeColor: item.theme_color || '#6366f1',
+            themeLabel: item.provisional_theme,
+            muOrder: item.mu_order,
+          });
+        }
       }
     }
 

@@ -1,67 +1,169 @@
 import React, { useState, useRef, useEffect } from 'react';
 
-const THEME_COLORS = [
-  '#6366f1', // indigo
-  '#f59e0b', // amber
-  '#10b981', // emerald
-  '#ef4444', // red
-  '#3b82f6', // blue
-  '#8b5cf6', // violet
-  '#f97316', // orange
-  '#14b8a6', // teal
-  '#ec4899', // pink
-  '#84cc16', // lime
+// ---------------------------------------------------------------------------
+// Color palette — 10 hue families × 8 lightness steps
+// Each sub-array is one column (hue), ordered light → dark.
+// ---------------------------------------------------------------------------
+const PALETTE = [
+  ['#fee2e2','#fecaca','#fca5a5','#f87171','#ef4444','#dc2626','#b91c1c','#991b1b'], // Red
+  ['#ffedd5','#fed7aa','#fdba74','#fb923c','#f97316','#ea580c','#c2410c','#9a3412'], // Orange
+  ['#fef9c3','#fef08a','#fde047','#facc15','#eab308','#ca8a04','#a16207','#854d0e'], // Yellow
+  ['#dcfce7','#bbf7d0','#86efac','#4ade80','#22c55e','#16a34a','#15803d','#166534'], // Green
+  ['#ccfbf1','#99f6e4','#5eead4','#2dd4bf','#14b8a6','#0d9488','#0f766e','#115e59'], // Teal
+  ['#dbeafe','#bfdbfe','#93c5fd','#60a5fa','#3b82f6','#2563eb','#1d4ed8','#1e40af'], // Blue
+  ['#e0e7ff','#c7d2fe','#a5b4fc','#818cf8','#6366f1','#4f46e5','#4338ca','#3730a3'], // Indigo
+  ['#f3e8ff','#e9d5ff','#d8b4fe','#c084fc','#a855f7','#9333ea','#7e22ce','#6b21a8'], // Purple
+  ['#fce7f3','#fbcfe8','#f9a8d4','#f472b6','#ec4899','#db2777','#be185d','#9d174d'], // Pink
+  ['#f9fafb','#f3f4f6','#e5e7eb','#d1d5db','#9ca3af','#6b7280','#4b5563','#1f2937'], // Gray
 ];
 
+// ---------------------------------------------------------------------------
+// ColorPicker — floating popup with swatch grid + hex input
+// ---------------------------------------------------------------------------
 function ColorPicker({ value, onChange }) {
   const [open, setOpen] = useState(false);
-  const ref = useRef(null);
+  const [hexInput, setHexInput] = useState('');
+  const [popupStyle, setPopupStyle] = useState({});
+  const buttonRef = useRef(null);
+  const popupRef = useRef(null);
 
+  // Sync hex field when popup opens or external value changes.
+  useEffect(() => {
+    setHexInput((value || '').replace(/^#/, ''));
+  }, [value, open]);
+
+  // Position popup below (or above) the trigger button, never off-screen.
+  useEffect(() => {
+    if (!open || !buttonRef.current) return;
+    const rect = buttonRef.current.getBoundingClientRect();
+    const popupW = 248;
+    const popupH = 270;
+    const vw = window.innerWidth;
+    const vh = window.innerHeight;
+
+    let left = rect.left;
+    if (left + popupW > vw - 8) left = vw - popupW - 8;
+
+    let top = rect.bottom + 4;
+    if (top + popupH > vh - 8) top = rect.top - popupH - 4;
+
+    setPopupStyle({ position: 'fixed', top, left, zIndex: 9999 });
+  }, [open]);
+
+  // Close on outside click.
   useEffect(() => {
     if (!open) return;
     const handler = (e) => {
-      if (ref.current && !ref.current.contains(e.target)) setOpen(false);
+      if (
+        popupRef.current && !popupRef.current.contains(e.target) &&
+        buttonRef.current && !buttonRef.current.contains(e.target)
+      ) setOpen(false);
     };
     document.addEventListener('mousedown', handler);
     return () => document.removeEventListener('mousedown', handler);
   }, [open]);
 
+  const commitHex = () => {
+    const raw = hexInput.trim();
+    const full = raw.startsWith('#') ? raw : '#' + raw;
+    if (/^#[0-9A-Fa-f]{6}$/.test(full)) {
+      onChange(full.toLowerCase());
+    }
+  };
+
+  const handleHexKeyDown = (e) => {
+    if (e.key === 'Enter') { commitHex(); setOpen(false); }
+    if (e.key === 'Escape') setOpen(false);
+  };
+
   return (
-    <div ref={ref} className="relative inline-block">
+    <>
+      {/* Trigger button */}
       <button
+        ref={buttonRef}
         type="button"
         onClick={() => setOpen(o => !o)}
-        className="flex items-center gap-1 px-1.5 py-1 border border-gray-200 rounded hover:border-gray-400 transition-colors"
+        className="flex items-center gap-1.5 px-2 py-1 border border-gray-200 rounded hover:border-gray-400 transition-colors"
         title="Pick theme color"
       >
         <span
-          className="inline-block w-3 h-3 rounded-full border border-gray-300"
+          className="inline-block w-4 h-4 rounded border border-gray-300 shrink-0"
           style={{ backgroundColor: value || '#d1d5db' }}
         />
-        <span className="text-xs text-gray-500">▼</span>
+        <span className="text-xs text-gray-400">▾</span>
       </button>
 
+      {/* Floating popup */}
       {open && (
-        <div className="absolute z-50 top-full left-0 mt-1 p-2 bg-white border border-gray-200 rounded-lg shadow-lg">
-          <div className="grid grid-cols-5 gap-1.5">
-            {THEME_COLORS.map(color => (
-              <button
-                key={color}
-                type="button"
-                onClick={() => { onChange(color); setOpen(false); }}
-                className="w-7 h-7 rounded transition-opacity hover:opacity-80"
-                style={{
-                  backgroundColor: color,
-                  outline: value === color ? '2px solid #1e293b' : '2px solid transparent',
-                  outlineOffset: 1,
-                }}
-                title={color}
-              />
+        <div
+          ref={popupRef}
+          style={popupStyle}
+          className="bg-white border border-gray-200 rounded-xl shadow-2xl p-3"
+        >
+          {/* Swatch grid: 10 columns (hues) × 8 rows (lightness) */}
+          <div className="flex flex-col gap-0.5 mb-3">
+            {Array.from({ length: 8 }, (_, row) => (
+              <div key={row} className="flex gap-0.5">
+                {PALETTE.map((col, colIdx) => (
+                  <button
+                    key={colIdx}
+                    type="button"
+                    onClick={() => { onChange(col[row]); setOpen(false); }}
+                    title={col[row]}
+                    className="rounded-sm transition-transform hover:scale-125 focus:outline-none"
+                    style={{
+                      width: 22,
+                      height: 22,
+                      backgroundColor: col[row],
+                      boxShadow: value === col[row]
+                        ? '0 0 0 2px #fff, 0 0 0 3.5px #1e293b'
+                        : undefined,
+                    }}
+                  />
+                ))}
+              </div>
             ))}
           </div>
+
+          {/* Divider */}
+          <div className="border-t border-gray-100 mb-2" />
+
+          {/* Preview swatch + hex input */}
+          <div className="flex items-center gap-2">
+            <span
+              className="w-8 h-8 rounded-md border border-gray-200 shrink-0"
+              style={{ backgroundColor: value || '#d1d5db' }}
+            />
+            <div className="flex flex-1 items-center border border-gray-200 rounded-md overflow-hidden text-xs">
+              <span className="px-2 py-1.5 text-gray-400 bg-gray-50 border-r border-gray-200 select-none font-mono">
+                #
+              </span>
+              <input
+                type="text"
+                value={hexInput}
+                onChange={e => setHexInput(e.target.value.replace(/[^0-9A-Fa-f]/g, '').slice(0, 6))}
+                onBlur={commitHex}
+                onKeyDown={handleHexKeyDown}
+                placeholder="e.g. 6366f1"
+                maxLength={6}
+                className="flex-1 px-1.5 py-1.5 focus:outline-none font-mono bg-white"
+              />
+            </div>
+          </div>
+
+          {/* Remove color link */}
+          {value && (
+            <button
+              type="button"
+              onClick={() => { onChange(null); setOpen(false); }}
+              className="mt-2 w-full text-xs text-gray-400 hover:text-gray-600 text-center py-0.5 rounded hover:bg-gray-50"
+            >
+              Remove color
+            </button>
+          )}
         </div>
       )}
-    </div>
+    </>
   );
 }
 

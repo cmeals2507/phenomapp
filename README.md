@@ -68,7 +68,7 @@ Stage 3 replaces the freeform text field from earlier versions with a structured
 **View 1 — Tagging Table**
 - One row per meaning unit
 - Read-only columns: Paraphrase, Stage 2 Notes (from Stage 2)
-- Editable columns: Provisional Theme label, color (10-swatch picker), Stage 3 Notes
+- Editable columns: Provisional Theme label, color (80-swatch popup picker with hex input), Stage 3 Notes
 - Filter by theme or tagged/untagged status; sort by original order or alphabetically by theme
 
 **View 2 — Grouped View**
@@ -86,7 +86,8 @@ Once meaning units have been assigned a theme and color in Stage 3, their excerp
 
 - Always visible (unless toggled off via "Hide highlights")
 - Re-rendered automatically after Stage 3 saves
-- Matched using fuzzy excerpt search (Levenshtein similarity ≥ 0.90), so lightly edited excerpts still match
+- Matched using exact normalized search (collapsed whitespace + lowercase); the transcript text must match the excerpt exactly
+- Excerpts containing `...` or `…` are treated as multi-segment: each segment is located and highlighted independently — both segments receive the same theme color
 - Read-only — the underlying transcript is never modified
 
 Overlapping excerpts show the lower-order theme's color with a small colored dot indicating the second theme.
@@ -228,7 +229,6 @@ The following are intentionally excluded from this version:
 - Version history beyond OS-level undo
 - Authentication or user accounts
 - Cloud sync or backup
-- Freeform hex color input (predefined 10-color palette only)
 - Cross-case theme comparison or corpus-level theme aggregation
 
 ---

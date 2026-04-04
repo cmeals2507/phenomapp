@@ -1,26 +1,18 @@
 /**
  * fuzzyMatch.js — locate a meaning-unit excerpt within a raw transcript.
  *
- * Because excerpts may be lightly edited or have minor whitespace / punctuation
- * differences, we use a sliding-window Levenshtein approach rather than exact
- * substring search.
- *
  * Algorithm:
- *  1. Normalize both strings (collapse whitespace, lowercase).
- *  2. Build a position map from the normalized transcript back to original indices.
- *  3. Slide a window of ≈excerptLength characters across the normalized transcript.
- *  4. Pre-filter: skip windows whose first N chars have similarity < 0.70.
- *  5. Compute Levenshtein similarity for survivors; track best.
- *  6. If best similarity ≥ 0.90, return { start, end } in original raw_text space.
- *  7. Otherwise return null (excerpt not found; no highlight).
+ *  1. Split excerpt on ellipsis delimiters ('...' or '…') into one or more parts.
+ *  2. Normalize each part (collapse whitespace, lowercase).
+ *  3. Build a position map from the normalized transcript back to original indices.
+ *  4. For each part, slide a fixed-width window (exact excerpt length) across the
+ *     normalized transcript. Pre-filter: skip windows whose first N chars differ
+ *     from the part's prefix (similarity < 1.0).
+ *  5. Compute Levenshtein similarity for survivors; require exact match (≥ 1.0).
+ *  6. If ALL parts match, return an array of { start, end } ranges in raw_text space.
+ *  7. If any part fails to match, return null (no highlight for this excerpt).
  *
- * Performance: runs on the main thread. For transcripts > 10 000 chars a Web
- * Worker would avoid blocking the UI — add as a future optimization.
- *
- * Cache usage: callers should memoize per (muId, excerptText) to avoid
- * recomputation on every render.
- *
- * Exported: findExcerptInText(excerpt, rawText) → { start, end } | null
+ * Exported: findExcerptInText(excerpt, rawText) → { start, end }[] | null
  */
 
 // ---------------------------------------------------------------------------
@@ -38,7 +30,7 @@ function normalize(s) {
 function buildNormalized(rawText) {
   let normalized = '';
   const indexMap = [];
-  let lastWasSpace = true; // treat start as-if preceded by whitespace to trim leading
+  let lastWasSpace = true;
 
   for (let i = 0; i < rawText.length; i++) {
     const ch = rawText[i];
@@ -55,7 +47,6 @@ function buildNormalized(rawText) {
     }
   }
 
-  // Trim trailing space that may have been added.
   if (normalized.endsWith(' ')) {
     normalized = normalized.slice(0, -1);
     indexMap.pop();
@@ -89,74 +80,76 @@ function levenshtein(a, b) {
   return prev[n];
 }
 
-// ---------------------------------------------------------------------------
-// Public API
-// ---------------------------------------------------------------------------
-
 /**
- * Find the best-matching position of `excerpt` within `rawText`.
- *
- * @param {string} excerpt  Analyst-entered excerpt (may have minor differences).
- * @param {string} rawText  Full immutable transcript text.
- * @returns {{ start: number, end: number } | null}  Character indices in rawText.
+ * Find a single normalized part within a pre-built normalized transcript.
+ * Returns { start, end } in original rawText space, or null.
  */
-export function findExcerptInText(excerpt, rawText) {
-  if (!excerpt || !rawText) return null;
+function findPart(normPart, normRaw, indexMap) {
+  const eLen = normPart.length;
+  if (eLen === 0 || eLen > normRaw.length) return null;
 
-  const normExcerpt = normalize(excerpt);
-  if (normExcerpt.length === 0) return null;
-
-  const { normalized: normRaw, indexMap } = buildNormalized(rawText);
-
-  const eLen = normExcerpt.length;
-  const minWin = Math.max(1, Math.floor(eLen * 0.80));
-  const maxWin = Math.ceil(eLen * 1.20);
-  const range = maxWin - minWin;
-
-  // Test up to 4 evenly spaced window sizes.
-  const winSizes = [...new Set([
-    minWin,
-    minWin + Math.floor(range / 3),
-    minWin + Math.floor((2 * range) / 3),
-    maxWin,
-  ])].filter(s => s >= 1);
-
-  // Pre-filter uses the first N chars of the normalized excerpt.
   const preLen = Math.min(10, Math.max(1, Math.floor(eLen / 3)));
-  const excerptPre = normExcerpt.slice(0, preLen);
+  const partPre = normPart.slice(0, preLen);
 
   let bestScore = 0;
   let bestNormStart = -1;
   let bestNormEnd = -1;
 
-  for (let i = 0; i <= normRaw.length - minWin; i++) {
-    // Pre-filter: bail early if the opening characters are too dissimilar.
+  for (let i = 0; i <= normRaw.length - eLen; i++) {
+    // Pre-filter: opening characters must match exactly.
     const windowPre = normRaw.slice(i, i + preLen);
-    const preMaxLen = Math.max(excerptPre.length, windowPre.length);
+    const preMaxLen = Math.max(partPre.length, windowPre.length);
     if (preMaxLen > 0) {
-      const preSim = 1 - levenshtein(excerptPre, windowPre) / preMaxLen;
-      if (preSim < 0.70) continue;
+      const preSim = 1 - levenshtein(partPre, windowPre) / preMaxLen;
+      if (preSim < 1.0) continue;
     }
 
-    for (const winLen of winSizes) {
-      if (i + winLen > normRaw.length) continue;
-      const window = normRaw.slice(i, i + winLen);
-      const maxL = Math.max(eLen, winLen);
-      const score = 1 - levenshtein(normExcerpt, window) / maxL;
-      if (score > bestScore) {
-        bestScore = score;
-        bestNormStart = i;
-        bestNormEnd = i + winLen;
-      }
+    const window = normRaw.slice(i, i + eLen);
+    const score = 1 - levenshtein(normPart, window) / eLen;
+    if (score > bestScore) {
+      bestScore = score;
+      bestNormStart = i;
+      bestNormEnd = i + eLen;
     }
   }
 
-  if (bestScore < 0.90 || bestNormStart === -1) return null;
+  if (bestScore < 1.0 || bestNormStart === -1) return null;
 
-  // Map normalized positions back to original rawText indices.
   const start = indexMap[bestNormStart] ?? 0;
   const lastNormIdx = Math.min(bestNormEnd - 1, indexMap.length - 1);
   const end = (indexMap[lastNormIdx] ?? 0) + 1;
 
   return { start, end };
+}
+
+// ---------------------------------------------------------------------------
+// Public API
+// ---------------------------------------------------------------------------
+
+/**
+ * Find all parts of `excerpt` within `rawText`.
+ * Parts are separated by ellipsis ('...' or '…'); each must match exactly
+ * (after normalization). All parts must match or null is returned.
+ *
+ * @param {string} excerpt  Analyst-entered excerpt; may contain '...' separators.
+ * @param {string} rawText  Full immutable transcript text.
+ * @returns {{ start: number, end: number }[] | null}
+ */
+export function findExcerptInText(excerpt, rawText) {
+  if (!excerpt || !rawText) return null;
+
+  // Split on '...' or the unicode ellipsis character '…'
+  const parts = excerpt.split(/\.{3}|…/).map(p => normalize(p)).filter(Boolean);
+  if (parts.length === 0) return null;
+
+  const { normalized: normRaw, indexMap } = buildNormalized(rawText);
+
+  const results = [];
+  for (const part of parts) {
+    const match = findPart(part, normRaw, indexMap);
+    if (!match) return null; // all parts must match
+    results.push(match);
+  }
+
+  return results;
 }
