@@ -42,17 +42,18 @@ function ColorPicker({ value, onChange }) {
       </button>
 
       {open && (
-        <div className="absolute z-50 top-full left-0 mt-1 p-1.5 bg-white border border-gray-200 rounded shadow-lg">
-          <div className="grid grid-cols-5 gap-1">
+        <div className="absolute z-50 top-full left-0 mt-1 p-2 bg-white border border-gray-200 rounded-lg shadow-lg">
+          <div className="grid grid-cols-5 gap-1.5">
             {THEME_COLORS.map(color => (
               <button
                 key={color}
                 type="button"
                 onClick={() => { onChange(color); setOpen(false); }}
-                className="w-5 h-5 rounded-full border-2 transition-transform hover:scale-110"
+                className="w-7 h-7 rounded transition-opacity hover:opacity-80"
                 style={{
                   backgroundColor: color,
-                  borderColor: value === color ? '#1e293b' : 'transparent',
+                  outline: value === color ? '2px solid #1e293b' : '2px solid transparent',
+                  outlineOffset: 1,
                 }}
                 title={color}
               />
