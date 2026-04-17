@@ -67,6 +67,13 @@ export default function App() {
     if (newId) handleSelectCase(newId);
   }, [loadTranscripts, handleSelectCase]);
 
+  const handleDelete = useCallback(async (id) => {
+    await window.phenomAPI.deleteTranscript(id);
+    setSelectedTranscript(null);
+    setOpenTabs([]);
+    await loadTranscripts();
+  }, [loadTranscripts]);
+
   const handleDbSwitch = useCallback(async () => {
     setSelectedTranscript(null);
     setOpenTabs([]);
@@ -92,6 +99,7 @@ export default function App() {
         selectedId={selectedTranscript?.id}
         onSelectCase={handleSelectCase}
         onImport={handleImport}
+        onDelete={handleDelete}
         onExportCorpus={() => window.phenomAPI.exportCorpus()}
         onDbSwitch={handleDbSwitch}
       />
@@ -101,6 +109,7 @@ export default function App() {
             transcript={selectedTranscript}
             width={transcriptWidth}
             onExport={() => window.phenomAPI.exportSingleCase(selectedTranscript.id)}
+            showCoverage={openTabs.includes('meaning_units')}
           />
           <ResizeDivider onMouseDown={handleResizeMouseDown} />
           <StageArea

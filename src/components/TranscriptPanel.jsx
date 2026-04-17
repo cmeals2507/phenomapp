@@ -68,7 +68,7 @@ function findSearchMatches(text, query) {
 // Main component
 // ---------------------------------------------------------------------------
 
-export default function TranscriptPanel({ transcript, width, onExport }) {
+export default function TranscriptPanel({ transcript, width, onExport, showCoverage }) {
   const wordCount = useMemo(() => {
     if (!transcript.raw_text) return 0;
     return transcript.raw_text.trim().split(/\s+/).filter(Boolean).length;
@@ -81,6 +81,9 @@ export default function TranscriptPanel({ transcript, width, onExport }) {
   // --- Theme highlight state ---
   const [highlightRanges, setHighlightRanges] = useState([]); // [{start, end, themeColor, themeLabel, muOrder}]
   const [showHighlights, setShowHighlights] = useState(true);
+
+  // --- Coverage (Stage 2 greying) state ---
+  const [coverageRanges, setCoverageRanges] = useState([]); // [{start, end}]
 
   const bodyRef = useRef(null);
 
@@ -131,6 +134,43 @@ export default function TranscriptPanel({ transcript, width, onExport }) {
     window.addEventListener('phenomapp:highlights-changed', handler);
     return () => window.removeEventListener('phenomapp:highlights-changed', handler);
   }, [computeHighlights]);
+
+  // ---------------------------------------------------------------------------
+  // Coverage computation (Stage 2 — grey out excerpted text)
+  // ---------------------------------------------------------------------------
+
+  const computeCoverage = useCallback(async () => {
+    if (!showCoverage) {
+      setCoverageRanges([]);
+      return;
+    }
+    const excerpts = await window.phenomAPI.getMeaningUnitExcerpts(transcript.id);
+    if (!excerpts || excerpts.length === 0) {
+      setCoverageRanges([]);
+      return;
+    }
+
+    const ranges = [];
+    for (const { excerpt, mu_order } of excerpts) {
+      const matches = findExcerptInText(excerpt, transcript.raw_text);
+      if (matches) {
+        for (const match of matches) {
+          ranges.push({ start: match.start, end: match.end, muOrder: mu_order });
+        }
+      }
+    }
+    setCoverageRanges(ranges);
+  }, [showCoverage, transcript.id, transcript.raw_text]);
+
+  useEffect(() => {
+    computeCoverage();
+  }, [computeCoverage]);
+
+  useEffect(() => {
+    const handler = () => computeCoverage();
+    window.addEventListener('phenomapp:coverage-changed', handler);
+    return () => window.removeEventListener('phenomapp:coverage-changed', handler);
+  }, [computeCoverage]);
 
   // ---------------------------------------------------------------------------
   // Search matches
@@ -186,6 +226,12 @@ export default function TranscriptPanel({ transcript, width, onExport }) {
       }
     }
 
+    if (showCoverage) {
+      for (const cr of coverageRanges) {
+        allRanges.push({ ...cr, type: 'coverage' });
+      }
+    }
+
     searchMatches.forEach((m, idx) => {
       allRanges.push({ ...m, type: 'search', matchIndex: idx });
     });
@@ -204,18 +250,23 @@ export default function TranscriptPanel({ transcript, width, onExport }) {
         .filter(r => r.type === 'theme')
         .sort((a, b) => a.muOrder - b.muOrder);
       const searchRange = seg.ranges.find(r => r.type === 'search');
+      const coverageItems = seg.ranges.filter(r => r.type === 'coverage');
+      const hasCoverage = coverageItems.length > 0;
 
       let style = {};
       let title = '';
       let extraContent = null;
 
+      // Grey out excerpted-but-not-themed text (coverage without theme or search).
+      if (hasCoverage && themeRanges.length === 0 && !searchRange) {
+        style.color = '#9ca3af'; // gray-400 — still readable, just visually receded
+      }
+
       // Apply theme highlight (lower mu_order wins on overlap).
       if (themeRanges.length === 1) {
         style.backgroundColor = hexToRgba(themeRanges[0].themeColor, 0.30);
-        title = themeRanges[0].themeLabel;
       } else if (themeRanges.length >= 2) {
         style.backgroundColor = hexToRgba(themeRanges[0].themeColor, 0.30);
-        title = themeRanges.map(t => t.themeLabel).join(' / ');
         // Overlay: small colored dot for second theme.
         extraContent = (
           <span
@@ -231,6 +282,21 @@ export default function TranscriptPanel({ transcript, width, onExport }) {
             }}
           />
         );
+      }
+
+      // Build tooltip: MU IDs when Stage 2 is open, theme labels otherwise.
+      if (showCoverage && (hasCoverage || themeRanges.length > 0)) {
+        const muOrderSet = new Set();
+        for (const r of themeRanges) muOrderSet.add(r.muOrder);
+        for (const r of coverageItems) muOrderSet.add(r.muOrder);
+        title = [...muOrderSet]
+          .sort((a, b) => a - b)
+          .map(o => `MU-${String(o).padStart(3, '0')}`)
+          .join(', ');
+      } else if (themeRanges.length === 1) {
+        title = themeRanges[0].themeLabel;
+      } else if (themeRanges.length >= 2) {
+        title = themeRanges.map(t => t.themeLabel).join(' / ');
       }
 
       // Apply search highlight (overrides theme background color).
@@ -256,7 +322,7 @@ export default function TranscriptPanel({ transcript, width, onExport }) {
         </span>
       );
     });
-  }, [transcript.raw_text, highlightRanges, showHighlights, searchMatches, activeMatchIndex]);
+  }, [transcript.raw_text, highlightRanges, showHighlights, coverageRanges, showCoverage, searchMatches, activeMatchIndex]);
 
   // ---------------------------------------------------------------------------
   // Render

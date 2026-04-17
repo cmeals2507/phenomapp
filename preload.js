@@ -6,17 +6,20 @@ contextBridge.exposeInMainWorld('phenomAPI', {
   getTranscripts: () => ipcRenderer.invoke('transcripts:getAll'),
   importTranscript: (data) => ipcRenderer.invoke('transcripts:import', data),
   getTranscript: (id) => ipcRenderer.invoke('transcripts:getOne', id),
+  deleteTranscript: (id) => ipcRenderer.invoke('transcripts:delete', id),
 
   getStageOutput: (data) => ipcRenderer.invoke('stage:getOutput', data),
   saveStageOutput: (data) => ipcRenderer.invoke('stage:saveOutput', data),
 
   getMeaningUnits: (transcriptId) => ipcRenderer.invoke('meaning-units:getAll', transcriptId),
   addMeaningUnit: (data) => ipcRenderer.invoke('meaning-units:add', data),
+  insertMeaningUnitAt: (data) => ipcRenderer.invoke('meaning-units:insertAt', data),
   saveMeaningUnit: (mu) => ipcRenderer.invoke('meaning-units:save', mu),
   saveMeaningUnitColor: (data) => ipcRenderer.invoke('meaning-units:saveColor', data),
   deleteMeaningUnit: (id) => ipcRenderer.invoke('meaning-units:delete', id),
   reorderMeaningUnits: (items) => ipcRenderer.invoke('meaning-units:reorder', items),
 
+  getMeaningUnitExcerpts: (transcriptId) => ipcRenderer.invoke('meaning-units:getExcerpts', transcriptId),
   getHighlightData: (transcriptId) => ipcRenderer.invoke('meaning-units:getHighlightData', transcriptId),
 
   exportSingleCase: (transcriptId) => ipcRenderer.invoke('export:singleCase', transcriptId),

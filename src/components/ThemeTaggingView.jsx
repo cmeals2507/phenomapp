@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
 
 // ---------------------------------------------------------------------------
 // Color palette — 10 hue families × 8 lightness steps
@@ -167,6 +167,89 @@ function ColorPicker({ value, onChange }) {
   );
 }
 
+// ---------------------------------------------------------------------------
+// ThemeInput — text input with autocomplete dropdown for existing themes
+// ---------------------------------------------------------------------------
+function ThemeInput({ value, suggestions, onChange, onSelect }) {
+  const [open, setOpen] = useState(false);
+  const [activeIdx, setActiveIdx] = useState(-1);
+  const containerRef = useRef(null);
+
+  // Filter to suggestions that contain what's typed (case-insensitive),
+  // but don't show an exact match as a suggestion.
+  const filtered = useMemo(() => {
+    if (!value.trim()) return suggestions;
+    const q = value.toLowerCase();
+    return suggestions.filter(s => s.label.toLowerCase().includes(q) && s.label !== value);
+  }, [value, suggestions]);
+
+  // Reset active index when filtered list changes.
+  useEffect(() => { setActiveIdx(-1); }, [filtered]);
+
+  // Close on outside click.
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e) => {
+      if (!containerRef.current?.contains(e.target)) setOpen(false);
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [open]);
+
+  const handleKeyDown = (e) => {
+    if (!open || filtered.length === 0) return;
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      setActiveIdx(i => Math.min(i + 1, filtered.length - 1));
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      setActiveIdx(i => Math.max(i - 1, 0));
+    } else if (e.key === 'Enter' && activeIdx >= 0) {
+      e.preventDefault();
+      const s = filtered[activeIdx];
+      onSelect(s.label, s.color);
+      setOpen(false);
+    } else if (e.key === 'Escape') {
+      setOpen(false);
+    }
+  };
+
+  return (
+    <div ref={containerRef} className="relative">
+      <input
+        type="text"
+        value={value}
+        onChange={e => { onChange(e.target.value); setOpen(true); }}
+        onFocus={() => setOpen(true)}
+        onKeyDown={handleKeyDown}
+        placeholder="Enter theme..."
+        className="w-full text-xs px-1 py-1 focus:outline-none bg-transparent"
+      />
+      {open && filtered.length > 0 && (
+        <div className="absolute top-full left-0 z-50 bg-white border border-gray-200 rounded shadow-lg min-w-[200px] max-h-48 overflow-y-auto">
+          {filtered.map((s, idx) => (
+            <button
+              key={s.label}
+              type="button"
+              onMouseDown={e => e.preventDefault()} // keep input focused
+              onClick={() => { onSelect(s.label, s.color); setOpen(false); }}
+              className={`flex items-center gap-2 w-full text-left px-3 py-1.5 text-xs ${
+                idx === activeIdx ? 'bg-indigo-50 text-indigo-700' : 'hover:bg-gray-50 text-gray-700'
+              }`}
+            >
+              <span
+                className="inline-block w-3 h-3 rounded-full border border-gray-300 shrink-0"
+                style={{ backgroundColor: s.color || '#d1d5db' }}
+              />
+              {s.label}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 const CASE_SENSITIVE_NOTE = (
   <p className="text-xs text-gray-400 mb-2">
     Theme grouping is case-sensitive. "Belonging" and "belonging" are treated as different themes.
@@ -181,6 +264,20 @@ export default function ThemeTaggingView({ units, onCellChange, onColorChange })
   const distinctThemes = [...new Set(
     units.map(u => u.provisional_theme).filter(t => t && t.trim())
   )].sort();
+
+  // Build deduplicated suggestions for autocomplete: [{label, color}]
+  // First color seen for a given theme name wins.
+  const suggestions = useMemo(() => {
+    const seen = new Map();
+    for (const u of units) {
+      if (u.provisional_theme && u.provisional_theme.trim() && !seen.has(u.provisional_theme)) {
+        seen.set(u.provisional_theme, u.theme_color || null);
+      }
+    }
+    return [...seen.entries()]
+      .map(([label, color]) => ({ label, color }))
+      .sort((a, b) => a.label.localeCompare(b.label));
+  }, [units]);
 
   // Apply filter.
   let visible = units;
@@ -256,8 +353,8 @@ export default function ThemeTaggingView({ units, onCellChange, onColorChange })
         <table className="w-full text-xs border-collapse">
           <thead>
             <tr className="text-left text-gray-500 bg-gray-50 sticky top-0 z-10">
+              <th className="p-2 border border-gray-200 w-1/4">Boundary Justification</th>
               <th className="p-2 border border-gray-200 w-1/4">Paraphrase</th>
-              <th className="p-2 border border-gray-200 w-1/4">Stage 2 Notes</th>
               <th className="p-2 border border-gray-200 w-1/5">Provisional Theme</th>
               <th className="p-2 border border-gray-200 w-8 text-center">Color</th>
               <th className="p-2 border border-gray-200">Stage 3 Notes</th>
@@ -270,24 +367,26 @@ export default function ThemeTaggingView({ units, onCellChange, onColorChange })
                 className="align-top hover:bg-gray-50"
                 style={unit.theme_color ? { borderLeft: `3px solid ${unit.theme_color}` } : {}}
               >
+                {/* Boundary Justification — read-only */}
+                <td className="p-2 border border-gray-200 text-gray-700 leading-relaxed">
+                  {unit.boundary_justification || <span className="text-gray-300 italic">—</span>}
+                </td>
+
                 {/* Paraphrase — read-only */}
                 <td className="p-2 border border-gray-200 text-gray-700 leading-relaxed">
                   {unit.paraphrase || <span className="text-gray-300 italic">—</span>}
                 </td>
 
-                {/* Analyst Note (Stage 2) — read-only */}
-                <td className="p-2 border border-gray-200 text-gray-700 leading-relaxed">
-                  {unit.analyst_note || <span className="text-gray-300 italic">—</span>}
-                </td>
-
-                {/* Provisional Theme — editable */}
+                {/* Provisional Theme — editable with autocomplete */}
                 <td className="p-1 border border-gray-200">
-                  <input
-                    type="text"
+                  <ThemeInput
                     value={unit.provisional_theme || ''}
-                    onChange={e => onCellChange(unit.id, 'provisional_theme', e.target.value)}
-                    placeholder="Enter theme..."
-                    className="w-full text-xs px-1 py-1 focus:outline-none bg-transparent"
+                    suggestions={suggestions}
+                    onChange={v => onCellChange(unit.id, 'provisional_theme', v)}
+                    onSelect={(label, color) => {
+                      onCellChange(unit.id, 'provisional_theme', label);
+                      if (color) onColorChange(unit.id, color);
+                    }}
                   />
                 </td>
 

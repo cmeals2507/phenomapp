@@ -84,9 +84,9 @@ export default function ThemeGroupedView({ units, onCellChange }) {
                 <div className="divide-y divide-gray-100">
                   {groupUnits.map(mu => (
                     <div key={mu.id} className="flex gap-0 text-xs">
-                      {/* Paraphrase (read-only, left half) */}
+                      {/* Boundary Justification (read-only, left half) */}
                       <div className="w-1/2 p-2 text-gray-700 leading-relaxed border-r border-gray-100">
-                        {mu.paraphrase || <span className="text-gray-300 italic">—</span>}
+                        {mu.boundary_justification || <span className="text-gray-300 italic">—</span>}
                       </div>
 
                       {/* Stage 3 Notes (editable, right half) */}

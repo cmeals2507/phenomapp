@@ -21,11 +21,14 @@ function CompletionDots({ count }) {
   );
 }
 
-export default function Sidebar({ transcripts, selectedId, onSelectCase, onImport, onExportCorpus, onDbSwitch }) {
+export default function Sidebar({ transcripts, selectedId, onSelectCase, onImport, onDelete, onExportCorpus, onDbSwitch }) {
   const [showImport, setShowImport] = useState(false);
   const [showDb, setShowDb] = useState(false);
   const [dbFileName, setDbFileName] = useState('');
   const [contextMenu, setContextMenu] = useState(null);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+
+  const selectedTranscript = transcripts.find(t => t.id === selectedId) || null;
 
   useEffect(() => {
     window.phenomAPI.dbGetPath().then(p => {
@@ -44,12 +47,19 @@ export default function Sidebar({ transcripts, selectedId, onSelectCase, onImpor
       style={{ width: 200 }}
       onClick={() => setContextMenu(null)}
     >
-      <div className="p-3 border-b border-gray-200">
+      <div className="p-3 border-b border-gray-200 space-y-1.5">
         <button
           onClick={() => setShowImport(true)}
           className="w-full text-sm bg-indigo-600 text-white rounded px-3 py-1.5 hover:bg-indigo-700 transition-colors"
         >
           + Import Transcript
+        </button>
+        <button
+          onClick={() => setShowDeleteConfirm(true)}
+          disabled={!selectedId}
+          className="w-full text-sm rounded px-3 py-1.5 transition-colors disabled:opacity-40 disabled:cursor-not-allowed bg-red-50 text-red-600 hover:bg-red-100 border border-red-200"
+        >
+          Delete Transcript
         </button>
       </div>
 
@@ -119,6 +129,39 @@ export default function Sidebar({ transcripts, selectedId, onSelectCase, onImpor
             onImport(newId);
           }}
         />
+      )}
+
+      {showDeleteConfirm && selectedTranscript && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg shadow-xl p-6 w-80 mx-4">
+            <h2 className="text-base font-semibold text-gray-900 mb-1">Delete Transcript?</h2>
+            <p className="text-sm text-gray-600 mb-1">
+              <span className="font-medium">{selectedTranscript.participant_id}</span>
+              {' '}
+              <span className="text-gray-400">({selectedTranscript.workflow})</span>
+            </p>
+            <p className="text-xs text-gray-500 mb-5">
+              This will permanently delete all stage outputs and meaning units associated with this transcript. This action cannot be undone.
+            </p>
+            <div className="flex gap-2 justify-end">
+              <button
+                onClick={() => setShowDeleteConfirm(false)}
+                className="px-4 py-1.5 text-sm rounded border border-gray-300 text-gray-700 hover:bg-gray-50 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={async () => {
+                  setShowDeleteConfirm(false);
+                  await onDelete(selectedTranscript.id);
+                }}
+                className="px-4 py-1.5 text-sm rounded bg-red-600 text-white hover:bg-red-700 transition-colors"
+              >
+                Delete
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {contextMenu && (

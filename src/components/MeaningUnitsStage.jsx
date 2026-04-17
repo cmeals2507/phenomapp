@@ -8,6 +8,7 @@ export default function MeaningUnitsStage({ transcript }) {
   const [units, setUnits] = useState([]);
   const [lastSavedTime, setLastSavedTime] = useState(null);
   const [saveError, setSaveError] = useState(false);
+  const [contextMenu, setContextMenu] = useState({ visible: false, x: 0, y: 0, unitIndex: null });
 
   const unitsRef = useRef([]);
   const dirtyIdsRef = useRef(new Set());
@@ -27,6 +28,14 @@ export default function MeaningUnitsStage({ transcript }) {
     load();
   }, [transcript.id]);
 
+  // Close context menu on any click outside it.
+  useEffect(() => {
+    if (!contextMenu.visible) return;
+    const handler = () => setContextMenu(c => ({ ...c, visible: false }));
+    window.addEventListener('mousedown', handler);
+    return () => window.removeEventListener('mousedown', handler);
+  }, [contextMenu.visible]);
+
   const scheduleSave = useCallback(() => {
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
     saveTimerRef.current = setTimeout(async () => {
@@ -38,6 +47,7 @@ export default function MeaningUnitsStage({ transcript }) {
         dirtyIdsRef.current.clear();
         setSaveError(false);
         setLastSavedTime(new Date().toLocaleTimeString());
+        window.dispatchEvent(new CustomEvent('phenomapp:coverage-changed'));
       } catch {
         setSaveError(true);
       }
@@ -56,6 +66,7 @@ export default function MeaningUnitsStage({ transcript }) {
       await Promise.all(toSave.map(mu => window.phenomAPI.saveMeaningUnit(mu)));
       dirtyIdsRef.current.clear();
       setLastSavedTime(new Date().toLocaleTimeString());
+      window.dispatchEvent(new CustomEvent('phenomapp:coverage-changed'));
     } catch {
       setSaveError(true);
     }
@@ -84,11 +95,26 @@ export default function MeaningUnitsStage({ transcript }) {
     setUnits(prev => [...prev, newMU]);
   };
 
+  const handleInsertAt = async (insertAtOrder) => {
+    setContextMenu(c => ({ ...c, visible: false }));
+    // Flush any pending edits before re-ordering.
+    await flushSave();
+    await window.phenomAPI.insertMeaningUnitAt({
+      transcriptId: transcript.id,
+      workflow: transcript.workflow,
+      insertAtOrder,
+    });
+    // Reload all units — mu_order values on existing rows have shifted.
+    const mus = await window.phenomAPI.getMeaningUnits(transcript.id);
+    setUnits(mus);
+  };
+
   const handleDelete = async (id) => {
     if (!window.confirm('Delete this meaning unit? This cannot be undone.')) return;
     await window.phenomAPI.deleteMeaningUnit(id);
     setUnits(prev => prev.filter(u => u.id !== id));
     dirtyIdsRef.current.delete(id);
+    window.dispatchEvent(new CustomEvent('phenomapp:coverage-changed'));
   };
 
   const handleDragStart = (index) => {
@@ -120,6 +146,11 @@ export default function MeaningUnitsStage({ transcript }) {
     dragOverItem.current = null;
   };
 
+  const handleRowContextMenu = (e, index) => {
+    e.preventDefault();
+    setContextMenu({ visible: true, x: e.clientX, y: e.clientY, unitIndex: index });
+  };
+
   return (
     <div className="flex flex-col h-full">
       <div className="px-3 py-2 border-b border-gray-100 bg-gray-50 shrink-0">
@@ -147,6 +178,7 @@ export default function MeaningUnitsStage({ transcript }) {
                 onDragEnter={() => handleDragEnter(index)}
                 onDragEnd={handleDragEnd}
                 onDragOver={e => e.preventDefault()}
+                onContextMenu={e => handleRowContextMenu(e, index)}
                 className="hover:bg-gray-50 cursor-grab active:cursor-grabbing"
               >
                 <td className="p-2 border border-gray-200 text-gray-400 font-mono text-center align-top select-none">
@@ -198,6 +230,28 @@ export default function MeaningUnitsStage({ transcript }) {
           ? `Last saved ${lastSavedTime}`
           : 'Not yet saved'}
       </div>
+
+      {/* Right-click context menu */}
+      {contextMenu.visible && contextMenu.unitIndex !== null && (
+        <div
+          style={{ position: 'fixed', top: contextMenu.y, left: contextMenu.x, zIndex: 1000 }}
+          className="bg-white border border-gray-200 rounded shadow-lg py-1 text-xs min-w-[160px]"
+          onMouseDown={e => e.stopPropagation()}
+        >
+          <button
+            className="block w-full text-left px-4 py-1.5 hover:bg-gray-100 text-gray-700"
+            onClick={() => handleInsertAt(units[contextMenu.unitIndex].mu_order)}
+          >
+            Add row above
+          </button>
+          <button
+            className="block w-full text-left px-4 py-1.5 hover:bg-gray-100 text-gray-700"
+            onClick={() => handleInsertAt(units[contextMenu.unitIndex].mu_order + 1)}
+          >
+            Add row below
+          </button>
+        </div>
+      )}
     </div>
   );
 }

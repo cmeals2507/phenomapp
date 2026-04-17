@@ -52,6 +52,14 @@ function getTranscript(id) {
  * Creates stage_outputs rows for memo, whole_part, essence only.
  * Stage 3 (provisional themes) lives entirely in meaning_units columns.
  */
+function deleteTranscript(id) {
+  db.transaction(() => {
+    db.prepare('DELETE FROM meaning_units WHERE transcript_id = ?').run(id);
+    db.prepare('DELETE FROM stage_outputs WHERE transcript_id = ?').run(id);
+    db.prepare('DELETE FROM transcripts WHERE id = ?').run(id);
+  })();
+}
+
 function importTranscript({ participantId, workflow, rawText }) {
   const result = db.prepare(
     'INSERT INTO transcripts (participant_id, workflow, raw_text) VALUES (?, ?, ?)'
@@ -129,6 +137,27 @@ function addMeaningUnit(transcriptId, workflow, dayStamps) {
 }
 
 /**
+ * Insert a new meaning unit at a specific position (mu_order), shifting
+ * everything at or after that position down by one.
+ */
+function insertMeaningUnit(transcriptId, workflow, dayStamps, insertAtOrder) {
+  let newId;
+  db.transaction(() => {
+    db.prepare(
+      'UPDATE meaning_units SET mu_order = mu_order + 1 WHERE transcript_id = ? AND mu_order >= ?'
+    ).run(transcriptId, insertAtOrder);
+
+    const result = db.prepare(
+      'INSERT INTO meaning_units (transcript_id, workflow, mu_order, day_stamps) VALUES (?, ?, ?, ?)'
+    ).run(transcriptId, workflow, insertAtOrder, dayStamps);
+
+    newId = result.lastInsertRowid;
+  })();
+
+  return db.prepare('SELECT * FROM meaning_units WHERE id = ?').get(newId);
+}
+
+/**
  * Update all analyst-editable fields on a meaning unit.
  * day_stamps is computed by the IPC handler (timestamps.js) before calling here.
  */
@@ -184,6 +213,16 @@ function reorderMeaningUnits(items) {
 // ---------------------------------------------------------------------------
 
 /**
+ * Returns excerpts for all meaning units that have one — used by TranscriptPanel
+ * to show coverage greying in Stage 2 (regardless of theme status).
+ */
+function getMeaningUnitExcerpts(transcriptId) {
+  return db.prepare(
+    "SELECT excerpt, mu_order FROM meaning_units WHERE transcript_id = ? AND excerpt IS NOT NULL AND excerpt != '' ORDER BY mu_order"
+  ).all(transcriptId);
+}
+
+/**
  * Returns only rows that have both excerpt and provisional_theme set —
  * the minimum data needed for the TranscriptPanel highlight layer.
  */
@@ -229,6 +268,7 @@ module.exports = {
   setDb,
   getAllTranscripts,
   getTranscript,
+  deleteTranscript,
   importTranscript,
   getStageOutput,
   getAllStageOutputs,
@@ -236,10 +276,12 @@ module.exports = {
   getMeaningUnits,
   getMeaningUnitById,
   addMeaningUnit,
+  insertMeaningUnit,
   saveMeaningUnit,
   saveMeaningUnitColor,
   deleteMeaningUnit,
   reorderMeaningUnits,
+  getMeaningUnitExcerpts,
   getHighlightData,
   getAllStageOutputsForCorpus,
   getAllMeaningUnitsForCorpus,

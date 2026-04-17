@@ -207,6 +207,15 @@ function registerIPC() {
     return queries.getTranscript(transcriptId);
   });
 
+  ipcMain.handle('transcripts:delete', (event, id) => {
+    try {
+      queries.deleteTranscript(id);
+      return { success: true };
+    } catch (err) {
+      return { error: err.message };
+    }
+  });
+
   // --- Stage outputs ---
 
   ipcMain.handle('stage:getOutput', (event, { transcriptId, stage }) => {
@@ -235,6 +244,16 @@ function registerIPC() {
     const { date, time } = nowParts();
     const initialDayStamps = JSON.stringify([{ date, first_edited_at: time }]);
     return queries.addMeaningUnit(transcriptId, workflow, initialDayStamps);
+  });
+
+  ipcMain.handle('meaning-units:insertAt', (event, { transcriptId, workflow, insertAtOrder }) => {
+    const { date, time } = nowParts();
+    const initialDayStamps = JSON.stringify([{ date, first_edited_at: time }]);
+    return queries.insertMeaningUnit(transcriptId, workflow, initialDayStamps, insertAtOrder);
+  });
+
+  ipcMain.handle('meaning-units:getExcerpts', (event, transcriptId) => {
+    return queries.getMeaningUnitExcerpts(transcriptId);
   });
 
   ipcMain.handle('meaning-units:save', (event, mu) => {

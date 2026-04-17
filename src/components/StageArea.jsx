@@ -39,7 +39,7 @@ export default function StageArea({ transcript, openTabs, onTabClick }) {
             <p className="text-sm">Click a stage tab to begin</p>
           </div>
         ) : (
-          openTabs.map(tabKey => {
+          [...openTabs].sort((a, b) => STAGES.findIndex(s => s.key === a) - STAGES.findIndex(s => s.key === b)).map(tabKey => {
             const stage = STAGES.find(s => s.key === tabKey);
             return (
               <div

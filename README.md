@@ -52,45 +52,78 @@ The same participant can have transcripts in multiple workflow conditions — th
 - **Resizable panels** — drag the divider between transcript and stage panels
 - **Auto-save** — all stage content saves automatically every 3 seconds; no manual save needed
 - **Import** — load `.txt` transcript files with participant ID and workflow condition
+- **Delete transcript** — remove a case and all its data via the sidebar delete button (confirmation dialog required)
 - **Export (single case)** — structured `.txt` file with all stage outputs for one case; Stage 3 exported grouped by theme
 - **Export (corpus)** — two `.csv` files covering all cases: one for freeform stage outputs, one for meaning units (including all Stage 3 fields)
 - **Database switching** — open a different `.db` file or create a new one (useful for a shared Dropbox-synced database)
 - **Transcript search** — case-insensitive search within the transcript panel with ↑↓ navigation and match counter
 - **Theme highlighting** — meaning unit excerpts are highlighted in the transcript panel using their assigned theme color once Stage 3 tagging begins; toggle on/off at any time
+- **Coverage greying** — when Stage 2 is open, text in the transcript panel that has been copied into any meaning unit's excerpt field is rendered in grey, providing a live map of which parts of the transcript have been attended to
+- **MU ID tooltips** — hovering over any grey (covered) or theme-highlighted text in the transcript panel while Stage 2 is open shows the corresponding meaning unit ID(s) (e.g., `MU-007` or `MU-007, MU-008` for overlapping excerpts)
 - **Day-locked timestamps** — all analyst-entered content records the date and time of first edit per calendar day, included in exports
+
+---
+
+## Stage 2 in Detail
+
+The meaning units table has one row per unit with these columns:
+
+| Column | Editable | Description |
+|---|---|---|
+| ID | No | Auto-assigned `MU-001` … `MU-NNN` label based on row order |
+| Excerpt | Yes | Verbatim text from the transcript |
+| Boundary Justification | Yes | Rationale for where this unit begins and ends |
+| Paraphrase | Yes | Analyst's descriptive paraphrase |
+| Analyst Note | Yes | Free observations or flags |
+
+**Row management:**
+- Rows are reorderable by drag-and-drop
+- **Right-click any row** to open a context menu with options to insert a blank row immediately above or below that row — useful when a pasted excerpt needs to be split into multiple units without scrolling to the bottom
+- The `+ Add Row` button appends a new blank row at the end
 
 ---
 
 ## Stage 3 in Detail
 
-Stage 3 replaces the freeform text field from earlier versions with a structured theme-tagging interface:
+Stage 3 uses a two-view interface:
 
 **View 1 — Tagging Table**
 - One row per meaning unit
-- Read-only columns: Paraphrase, Stage 2 Notes (from Stage 2)
+- Read-only reference columns: Boundary Justification, Paraphrase (carried over from Stage 2)
 - Editable columns: Provisional Theme label, color (80-swatch popup picker with hex input), Stage 3 Notes
+- **Theme autocomplete** — typing in the Provisional Theme field shows a dropdown of existing theme names from the current case. Selecting a suggestion fills the theme name and automatically applies that theme's saved color to both the color picker and the transcript highlight
 - Filter by theme or tagged/untagged status; sort by original order or alphabetically by theme
 
 **View 2 — Grouped View**
 - Meaning units collapsed under their assigned theme label
-- Stage 3 Notes editable inline; theme labels and colors not editable from this view
+- Read-only reference column: Boundary Justification (from Stage 2)
+- Stage 3 Notes editable inline
 - "Untagged" block at the bottom for units not yet assigned a theme
 
 Theme grouping is **case-sensitive** — "Belonging" and "belonging" are treated as distinct themes.
 
 ---
 
-## Transcript Theme Highlighting
+## Transcript Panel in Detail
 
-Once meaning units have been assigned a theme and color in Stage 3, their excerpts are highlighted in the transcript panel using the theme color at 30% opacity. Highlights are:
+The left panel shows the full immutable transcript. While working:
 
-- Always visible (unless toggled off via "Hide highlights")
-- Re-rendered automatically after Stage 3 saves
-- Matched using exact normalized search (collapsed whitespace + lowercase); the transcript text must match the excerpt exactly
-- Excerpts containing `...` or `…` are treated as multi-segment: each segment is located and highlighted independently — both segments receive the same theme color
-- Read-only — the underlying transcript is never modified
+**Theme highlights (Stage 3)**
+- Once a meaning unit has both an excerpt and a provisional theme, the matching text is highlighted in the transcript using the theme color at 30% opacity
+- Toggle on/off via "Hide/Show highlights"
+- Overlapping excerpts show the lower-order theme's color with a small colored dot for the second theme
+- Hovering over highlighted text shows the theme label as a tooltip
 
-Overlapping excerpts show the lower-order theme's color with a small colored dot indicating the second theme.
+**Coverage greying (Stage 2)**
+- Active whenever the Stage 2 tab is open
+- Any transcript text that has been copied into a meaning unit's excerpt field is rendered in grey
+- Text that has both a coverage match and a theme highlight shows the theme color (color takes precedence over grey)
+- Hovering over greyed or highlighted text shows the MU ID(s): e.g., `MU-004` or `MU-004, MU-009`
+- Updates live within ~3 seconds of an excerpt being saved
+
+**Matching algorithm**
+- All excerpt matching (both highlights and coverage) uses exact normalized match: whitespace collapsed, case-insensitive
+- Excerpts containing `...` or `…` are treated as multi-segment; each segment is independently located in the transcript
 
 ---
 
@@ -179,17 +212,16 @@ phenomapp/
 ├── preload.js                        # Context bridge (exposes IPC to renderer)
 ├── electron-builder.config.js        # macOS .dmg packaging config
 ├── vite.config.js                    # Vite renderer build config
-├── SPEC_v2.md                        # Authoritative feature specification (v2.1)
 ├── src/
 │   ├── App.jsx                       # Root component — layout, pane resize, tab state
 │   ├── components/
-│   │   ├── Sidebar.jsx               # Case list, import, export, DB switcher
-│   │   ├── TranscriptPanel.jsx       # Transcript display with search + theme highlights
+│   │   ├── Sidebar.jsx               # Case list, import, delete, export, DB switcher
+│   │   ├── TranscriptPanel.jsx       # Transcript display, search, theme highlights, coverage greying
 │   │   ├── StageArea.jsx             # Tab bar + dual-panel split logic
 │   │   ├── FreeformStage.jsx         # Stages 1, 4, 5 — textarea with auto-save
-│   │   ├── MeaningUnitsStage.jsx     # Stage 2 — table with drag-and-drop reorder
+│   │   ├── MeaningUnitsStage.jsx     # Stage 2 — table with drag-and-drop, right-click insert
 │   │   ├── ProvisionalThemesStage.jsx# Stage 3 — view toggle + state management
-│   │   ├── ThemeTaggingView.jsx      # Stage 3 View 1 — per-row theme entry table
+│   │   ├── ThemeTaggingView.jsx      # Stage 3 View 1 — per-row theme entry with autocomplete
 │   │   ├── ThemeGroupedView.jsx      # Stage 3 View 2 — collapsed by theme
 │   │   ├── ImportModal.jsx           # Import dialog
 │   │   └── DatabaseModal.jsx         # Database file switcher
@@ -214,7 +246,7 @@ One record per participant per workflow condition. The `raw_text` field is immut
 One row per case per freeform stage (`memo`, `whole_part`, `essence`). Includes a `day_stamps` JSON column tracking first-edit times per calendar day. Content is upserted on every auto-save.
 
 ### `meaning_units`
-One row per meaning unit. Core fields: `excerpt`, `boundary_justification`, `paraphrase`, `analyst_note`, `mu_order`. Stage 3 fields: `provisional_theme`, `theme_color`, `stage3_notes`. Also includes `day_stamps`. Reorderable by drag-and-drop.
+One row per meaning unit. Core fields: `excerpt`, `boundary_justification`, `paraphrase`, `analyst_note`, `mu_order`. Stage 3 fields: `provisional_theme`, `theme_color`, `stage3_notes`. Also includes `day_stamps`. Reorderable by drag-and-drop; insertable at any position via right-click context menu.
 
 ---
 
