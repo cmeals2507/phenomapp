@@ -49,14 +49,31 @@ function initSchema(db) {
     );
   `);
 
-  // Migration: add new columns to existing v1.0 databases.
-  // safe to re-run on any database — ALTER TABLE fails silently if column exists.
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS mu_reorder_log (
+      id            INTEGER PRIMARY KEY AUTOINCREMENT,
+      transcript_id INTEGER NOT NULL,
+      reordered_at  TEXT NOT NULL,
+      order_snapshot TEXT NOT NULL,
+      note          TEXT,
+      FOREIGN KEY (transcript_id) REFERENCES transcripts(id)
+    );
+
+    CREATE TABLE IF NOT EXISTS project_meta (
+      key   TEXT PRIMARY KEY,
+      value TEXT NOT NULL
+    );
+  `);
+
+  // Migration: add new columns to existing databases.
+  // safe to re-run — ALTER TABLE fails silently if column exists.
   const migrations = [
     'ALTER TABLE stage_outputs ADD COLUMN day_stamps TEXT',
     'ALTER TABLE meaning_units ADD COLUMN provisional_theme TEXT',
     'ALTER TABLE meaning_units ADD COLUMN theme_color TEXT',
     'ALTER TABLE meaning_units ADD COLUMN stage3_notes TEXT',
     'ALTER TABLE meaning_units ADD COLUMN day_stamps TEXT',
+    'ALTER TABLE meaning_units ADD COLUMN assignment_rationale TEXT',
   ];
 
   for (const sql of migrations) {

@@ -54,12 +54,57 @@ const MURow = memo(function MURow({ unit, onCellChange, onDelete, onDragStart, o
   );
 });
 
+// Inline log entry — click to expand order snapshot
+function ReorderLogEntry({ entry, units }) {
+  const [expanded, setExpanded] = useState(false);
+
+  const muCount = (() => {
+    try { return JSON.parse(entry.order_snapshot).length; } catch { return '?'; }
+  })();
+
+  const snapshot = expanded ? (() => {
+    try {
+      const ids = JSON.parse(entry.order_snapshot);
+      return ids.map((id, i) => {
+        const u = units.find(u => u.id === id);
+        return `${i + 1}. ${u ? formatMUId(u.mu_order) : `id:${id}`}`;
+      }).join('  ');
+    } catch { return entry.order_snapshot; }
+  })() : null;
+
+  const ts = entry.reordered_at.replace('T', ' ').replace(/\.\d+Z$/, '');
+
+  return (
+    <div className="border border-gray-100 rounded p-1.5 bg-gray-50 text-xs">
+      <button
+        onClick={() => setExpanded(e => !e)}
+        className="w-full text-left flex items-center gap-2 text-gray-500 hover:text-gray-700"
+      >
+        <span className="font-mono shrink-0">{ts}</span>
+        <span className="shrink-0">Reordered — {muCount} units</span>
+        {entry.note && <span className="text-gray-600 italic truncate">"{entry.note}"</span>}
+        <span className="ml-auto text-gray-300 shrink-0">{expanded ? '▲' : '▼'}</span>
+      </button>
+      {expanded && snapshot && (
+        <p className="mt-1.5 text-gray-500 leading-relaxed pl-2 border-t border-gray-100 pt-1.5">
+          {snapshot}
+        </p>
+      )}
+    </div>
+  );
+}
+
 export default function MeaningUnitsStage({ transcript }) {
   const [units, setUnits] = useState([]);
   const [lastSavedTime, setLastSavedTime] = useState(null);
   const [saveError, setSaveError] = useState(false);
   const [contextMenu, setContextMenu] = useState({ visible: false, x: 0, y: 0, unitId: null });
   const [panelSearch, setPanelSearch] = useState('');
+
+  // Reorder audit log state
+  const [reorderNote, setReorderNote] = useState(null); // { logId, text, visible }
+  const [showHistory, setShowHistory] = useState(false);
+  const [reorderHistory, setReorderHistory] = useState(null); // null = not yet loaded
 
   const unitsRef = useRef([]);
   const dirtyIdsRef = useRef(new Set());
@@ -77,6 +122,10 @@ export default function MeaningUnitsStage({ transcript }) {
       setUnits(mus);
     }
     load();
+    // Reset log state when transcript changes
+    setReorderNote(null);
+    setShowHistory(false);
+    setReorderHistory(null);
   }, [transcript.id]);
 
   useEffect(() => {
@@ -85,6 +134,15 @@ export default function MeaningUnitsStage({ transcript }) {
     window.addEventListener('mousedown', handler);
     return () => window.removeEventListener('mousedown', handler);
   }, [contextMenu.visible]);
+
+  // Auto-dismiss reorder note prompt after 10 seconds
+  useEffect(() => {
+    if (!reorderNote?.visible) return;
+    const timer = setTimeout(() => {
+      setReorderNote(n => n ? { ...n, visible: false } : n);
+    }, 10000);
+    return () => clearTimeout(timer);
+  }, [reorderNote?.visible, reorderNote?.logId]);
 
   const scheduleSave = useCallback(() => {
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
@@ -178,6 +236,8 @@ export default function MeaningUnitsStage({ transcript }) {
   const handleDragEnd = useCallback(async () => {
     const fromId = dragItem.current;
     const toId = dragOverItem.current;
+    dragItem.current = null;
+    dragOverItem.current = null;
     if (!fromId || !toId || fromId === toId) return;
 
     const current = unitsRef.current;
@@ -196,10 +256,37 @@ export default function MeaningUnitsStage({ transcript }) {
       reordered.map(u => ({ id: u.id, mu_order: u.mu_order }))
     );
 
+    // Log the reorder event
+    const now = new Date().toISOString();
+    const orderSnapshot = JSON.stringify(reordered.map(u => u.id));
+    const result = await window.phenomAPI.logMUReorder({
+      transcriptId: transcript.id,
+      reorderedAt: now,
+      orderSnapshot,
+    });
+    if (result?.id) {
+      setReorderNote({ logId: result.id, text: '', visible: true });
+    }
+
     setLastSavedTime(new Date().toLocaleTimeString());
-    dragItem.current = null;
-    dragOverItem.current = null;
-  }, []);
+  }, [transcript.id]);
+
+  const handleSaveReorderNote = useCallback(async () => {
+    if (!reorderNote?.logId) return;
+    await window.phenomAPI.updateReorderLogNote({ id: reorderNote.logId, note: reorderNote.text });
+    setReorderNote(n => n ? { ...n, visible: false } : n);
+    // Refresh history if open
+    setReorderHistory(null);
+  }, [reorderNote]);
+
+  const handleToggleHistory = useCallback(async () => {
+    const next = !showHistory;
+    setShowHistory(next);
+    if (next) {
+      const history = await window.phenomAPI.getReorderLog(transcript.id);
+      setReorderHistory(history);
+    }
+  }, [showHistory, transcript.id]);
 
   const handleRowContextMenu = useCallback((e, unitId) => {
     e.preventDefault();
@@ -275,6 +362,63 @@ export default function MeaningUnitsStage({ transcript }) {
             {panelSearch ? 'No matching rows.' : 'No meaning units yet. Click "+ Add Row" to begin.'}
           </p>
         )}
+
+        {/* Reorder note prompt */}
+        {reorderNote?.visible && (
+          <div className="mt-3 p-2.5 bg-amber-50 border border-amber-200 rounded text-xs flex flex-col gap-2">
+            <p className="text-amber-700">Row order changed. Add a note explaining why? (optional)</p>
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={reorderNote.text}
+                onChange={e => setReorderNote(n => ({ ...n, text: e.target.value }))}
+                onKeyDown={e => {
+                  if (e.key === 'Enter') handleSaveReorderNote();
+                  if (e.key === 'Escape') setReorderNote(n => ({ ...n, visible: false }));
+                }}
+                placeholder="Reason for reorder..."
+                className="flex-1 border border-amber-200 rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-amber-400 bg-white"
+                autoFocus
+              />
+              <button
+                onClick={handleSaveReorderNote}
+                className="text-xs px-2.5 py-1 bg-amber-500 text-white rounded hover:bg-amber-600 shrink-0"
+              >
+                Save note
+              </button>
+              <button
+                onClick={() => setReorderNote(n => ({ ...n, visible: false }))}
+                className="text-xs px-2 py-1 text-gray-500 hover:text-gray-700 shrink-0"
+              >
+                Dismiss
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Reorder history disclosure */}
+        <div className="mt-3">
+          <button
+            onClick={handleToggleHistory}
+            className="text-xs text-gray-400 hover:text-indigo-500 transition-colors flex items-center gap-1"
+          >
+            <span>{showHistory ? '▼' : '▶'}</span>
+            <span>Reorder history</span>
+          </button>
+          {showHistory && (
+            <div className="mt-2 space-y-1.5 max-h-48 overflow-y-auto">
+              {reorderHistory === null ? (
+                <p className="text-xs text-gray-400">Loading…</p>
+              ) : reorderHistory.length === 0 ? (
+                <p className="text-xs text-gray-400">No reorder events recorded.</p>
+              ) : (
+                reorderHistory.map(entry => (
+                  <ReorderLogEntry key={entry.id} entry={entry} units={units} />
+                ))
+              )}
+            </div>
+          )}
+        </div>
 
         {!panelSearch && (
           <button

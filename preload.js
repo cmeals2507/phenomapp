@@ -22,6 +22,13 @@ contextBridge.exposeInMainWorld('phenomAPI', {
   getMeaningUnitExcerpts: (transcriptId) => ipcRenderer.invoke('meaning-units:getExcerpts', transcriptId),
   getHighlightData: (transcriptId) => ipcRenderer.invoke('meaning-units:getHighlightData', transcriptId),
 
+  logMUReorder: (data) => ipcRenderer.invoke('meaning-units:logReorder', data),
+  updateReorderLogNote: (data) => ipcRenderer.invoke('meaning-units:updateReorderNote', data),
+  getReorderLog: (transcriptId) => ipcRenderer.invoke('meaning-units:getReorderLog', transcriptId),
+
+  getPositionality: () => ipcRenderer.invoke('project:getPositionality'),
+  savePositionality: (text) => ipcRenderer.invoke('project:savePositionality', text),
+
   exportSingleCase: (transcriptId) => ipcRenderer.invoke('export:singleCase', transcriptId),
   exportCorpus: () => ipcRenderer.invoke('export:corpus'),
 

@@ -19,20 +19,25 @@ const CASE_SENSITIVE_NOTE = (
 const GroupedMURow = memo(function GroupedMURow({ mu, onCellChange, isUntagged }) {
   return (
     <div className="flex gap-0 text-xs">
-      <div className="w-1/2 p-2 text-gray-700 leading-relaxed border-r border-gray-100 flex items-start gap-1.5">
-        <span
-          className="font-mono text-gray-400 hover:text-indigo-500 cursor-pointer shrink-0 select-none transition-colors"
-          title={mu.excerpt ? 'Click to locate in transcript' : undefined}
-          onClick={() => dispatchScrollToMU(mu.excerpt)}
-        >
-          {formatMUId(mu.mu_order)}
-        </span>
-        <span>
-          {isUntagged
-            ? (mu.paraphrase || <span className="text-gray-300 italic">—</span>)
-            : (mu.boundary_justification || <span className="text-gray-300 italic">—</span>)
-          }
-        </span>
+      <div className="w-1/2 p-2 text-gray-700 leading-relaxed border-r border-gray-100 flex flex-col gap-1">
+        <div className="flex items-start gap-1.5">
+          <span
+            className="font-mono text-gray-400 hover:text-indigo-500 cursor-pointer shrink-0 select-none transition-colors"
+            title={mu.excerpt ? 'Click to locate in transcript' : undefined}
+            onClick={() => dispatchScrollToMU(mu.excerpt)}
+          >
+            {formatMUId(mu.mu_order)}
+          </span>
+          <span>
+            {isUntagged
+              ? (mu.paraphrase || <span className="text-gray-300 italic">—</span>)
+              : (mu.boundary_justification || <span className="text-gray-300 italic">—</span>)
+            }
+          </span>
+        </div>
+        {!isUntagged && mu.assignment_rationale && (
+          <p className="text-gray-400 italic pl-7 leading-snug">{mu.assignment_rationale}</p>
+        )}
       </div>
       <div className="w-1/2 p-1">
         <textarea
@@ -64,7 +69,7 @@ export default function ThemeGroupedView({ units, onCellChange, panelSearch }) {
     if (!panelSearch?.trim()) return units;
     const q = panelSearch.toLowerCase();
     return units.filter(u =>
-      ['boundary_justification', 'paraphrase', 'provisional_theme', 'stage3_notes'].some(f =>
+      ['boundary_justification', 'paraphrase', 'provisional_theme', 'assignment_rationale', 'stage3_notes'].some(f =>
         (u[f] || '').toLowerCase().includes(q)
       )
     );

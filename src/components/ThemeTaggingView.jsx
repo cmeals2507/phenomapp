@@ -266,6 +266,13 @@ const CASE_SENSITIVE_NOTE = (
 // Memoized row — only re-renders when its own unit data or suggestions change
 // ---------------------------------------------------------------------------
 const ThemeTaggingRow = memo(function ThemeTaggingRow({ unit, suggestions, onCellChange, onColorChange }) {
+  // Amber indicator: theme + color set but rationale missing → highlight is blocked
+  const needsRationale = Boolean(
+    unit.provisional_theme?.trim() &&
+    unit.theme_color &&
+    !unit.assignment_rationale?.trim()
+  );
+
   return (
     <tr
       className="align-top hover:bg-gray-50"
@@ -319,6 +326,29 @@ const ThemeTaggingRow = memo(function ThemeTaggingRow({ unit, suggestions, onCel
       </td>
 
       <td className="p-1 border border-gray-200">
+        <div className="flex items-start gap-1">
+          {needsRationale && (
+            <span
+              className="inline-block w-2 h-2 rounded-full bg-amber-400 mt-1.5 shrink-0"
+              title="Add a rationale to activate the transcript highlight for this unit"
+            />
+          )}
+          <textarea
+            value={unit.assignment_rationale || ''}
+            onChange={e => {
+              e.target.style.height = 'auto';
+              e.target.style.height = e.target.scrollHeight + 'px';
+              onCellChange(unit.id, 'assignment_rationale', e.target.value);
+            }}
+            placeholder="Why does this unit belong here?"
+            ref={el => { if (el) { el.style.height = 'auto'; el.style.height = el.scrollHeight + 'px'; } }}
+            className="flex-1 text-xs p-1 resize-none focus:outline-none bg-transparent leading-relaxed"
+            style={{ overflow: 'hidden', minHeight: '2.5rem' }}
+          />
+        </div>
+      </td>
+
+      <td className="p-1 border border-gray-200">
         <textarea
           value={unit.stage3_notes || ''}
           onChange={e => {
@@ -361,7 +391,7 @@ export default function ThemeTaggingView({ units, onCellChange, onColorChange, p
     if (!panelSearch?.trim()) return units;
     const q = panelSearch.toLowerCase();
     return units.filter(u =>
-      ['boundary_justification', 'paraphrase', 'provisional_theme', 'stage3_notes'].some(f =>
+      ['boundary_justification', 'paraphrase', 'provisional_theme', 'assignment_rationale', 'stage3_notes'].some(f =>
         (u[f] || '').toLowerCase().includes(q)
       )
     );
@@ -447,10 +477,11 @@ export default function ThemeTaggingView({ units, onCellChange, onColorChange, p
           <thead>
             <tr className="text-left text-gray-500 bg-gray-50 sticky top-0 z-10">
               <th className="p-2 border border-gray-200 w-14 text-center">ID</th>
-              <th className="p-2 border border-gray-200 w-1/4">Boundary Justification</th>
-              <th className="p-2 border border-gray-200 w-1/4">Paraphrase</th>
-              <th className="p-2 border border-gray-200 w-1/5">Provisional Theme</th>
+              <th className="p-2 border border-gray-200 w-1/5">Boundary Justification</th>
+              <th className="p-2 border border-gray-200 w-1/5">Paraphrase</th>
+              <th className="p-2 border border-gray-200 w-1/6">Provisional Theme</th>
               <th className="p-2 border border-gray-200 w-8 text-center">Color</th>
+              <th className="p-2 border border-gray-200 w-1/5">Assignment Rationale</th>
               <th className="p-2 border border-gray-200">Stage 3 Notes</th>
             </tr>
           </thead>

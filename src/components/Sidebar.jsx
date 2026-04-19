@@ -1,6 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import ImportModal from './ImportModal';
 import DatabaseModal from './DatabaseModal';
+import PositionalityModal from './PositionalityModal';
 
 const WORKFLOW = {
   human:   { short: 'H',  color: 'bg-blue-100 text-blue-700' },
@@ -24,10 +25,27 @@ function CompletionDots({ stages }) {
 export default function Sidebar({ transcripts, selectedId, onSelectCase, onImport, onDelete, onExportCorpus, onDbSwitch }) {
   const [showImport, setShowImport] = useState(false);
   const [showDb, setShowDb] = useState(false);
+  const [showPositionality, setShowPositionality] = useState(false);
   const [dbFileName, setDbFileName] = useState('');
   const [contextMenu, setContextMenu] = useState(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [lastSaved, setLastSaved] = useState(null);
+  const [hasPositionality, setHasPositionality] = useState(false);
+
+  const refreshPositionality = useCallback(async () => {
+    const p = await window.phenomAPI.getPositionality();
+    setHasPositionality(Boolean(p?.text?.trim()));
+  }, []);
+
+  useEffect(() => {
+    refreshPositionality();
+  }, [refreshPositionality]);
+
+  useEffect(() => {
+    const handler = () => refreshPositionality();
+    window.addEventListener('phenomapp:positionality-changed', handler);
+    return () => window.removeEventListener('phenomapp:positionality-changed', handler);
+  }, [refreshPositionality]);
 
   useEffect(() => {
     const handler = () => setLastSaved(new Date().toLocaleTimeString());
@@ -111,6 +129,19 @@ export default function Sidebar({ transcripts, selectedId, onSelectCase, onImpor
         {lastSaved && (
           <p className="text-xs text-green-600 text-center">Saved {lastSaved}</p>
         )}
+
+        {/* Positionality indicator */}
+        <button
+          onClick={() => setShowPositionality(true)}
+          className="w-full flex items-center gap-1.5 px-2 py-1.5 rounded hover:bg-gray-100 transition-colors text-left"
+          title={hasPositionality ? 'Positionality recorded — click to edit' : 'No positionality record — click to add'}
+        >
+          <span className={`inline-block w-2 h-2 rounded-full shrink-0 ${hasPositionality ? 'bg-green-500' : 'bg-red-500'}`} />
+          <span className={`text-xs font-medium ${hasPositionality ? 'text-green-600' : 'text-red-500'}`}>
+            {hasPositionality ? 'Positionality recorded' : 'No positionality record'}
+          </span>
+        </button>
+
         <button
           onClick={onExportCorpus}
           className="w-full text-xs text-gray-500 hover:text-gray-900 hover:bg-gray-100 rounded px-2 py-1.5 transition-colors text-center"
@@ -126,6 +157,10 @@ export default function Sidebar({ transcripts, selectedId, onSelectCase, onImpor
         </button>
       </div>
 
+      {showPositionality && (
+        <PositionalityModal onClose={() => setShowPositionality(false)} />
+      )}
+
       {showDb && (
         <DatabaseModal
           onClose={() => setShowDb(false)}
@@ -133,6 +168,7 @@ export default function Sidebar({ transcripts, selectedId, onSelectCase, onImpor
             setDbFileName(newPath.split('/').pop());
             setShowDb(false);
             onDbSwitch();
+            refreshPositionality();
           }}
         />
       )}

@@ -45,13 +45,9 @@ function getTranscript(id) {
   return db.prepare('SELECT * FROM transcripts WHERE id = ?').get(id);
 }
 
-/**
- * Import a transcript.
- * Creates stage_outputs rows for memo, whole_part, essence only.
- * Stage 3 (provisional themes) lives entirely in meaning_units columns.
- */
 function deleteTranscript(id) {
   db.transaction(() => {
+    db.prepare('DELETE FROM mu_reorder_log WHERE transcript_id = ?').run(id);
     db.prepare('DELETE FROM meaning_units WHERE transcript_id = ?').run(id);
     db.prepare('DELETE FROM stage_outputs WHERE transcript_id = ?').run(id);
     db.prepare('DELETE FROM transcripts WHERE id = ?').run(id);
@@ -90,10 +86,6 @@ function getAllStageOutputs(transcriptId) {
   ).all(transcriptId);
 }
 
-/**
- * Upsert a stage output, including updated day_stamps.
- * day_stamps is computed by the IPC handler (timestamps.js) before calling here.
- */
 function saveStageOutput(transcriptId, stage, content, dayStamps) {
   db.prepare(`
     INSERT INTO stage_outputs (transcript_id, stage, content, day_stamps, updated_at)
@@ -119,9 +111,6 @@ function getMeaningUnitById(id) {
   return db.prepare('SELECT * FROM meaning_units WHERE id = ?').get(id);
 }
 
-/**
- * Add a new meaning unit row. day_stamps is initialized by the IPC handler.
- */
 function addMeaningUnit(transcriptId, workflow, dayStamps) {
   const { max_order } = db.prepare(
     'SELECT COALESCE(MAX(mu_order), 0) as max_order FROM meaning_units WHERE transcript_id = ?'
@@ -134,10 +123,6 @@ function addMeaningUnit(transcriptId, workflow, dayStamps) {
   return db.prepare('SELECT * FROM meaning_units WHERE id = ?').get(result.lastInsertRowid);
 }
 
-/**
- * Insert a new meaning unit at a specific position (mu_order), shifting
- * everything at or after that position down by one.
- */
 function insertMeaningUnit(transcriptId, workflow, dayStamps, insertAtOrder) {
   let newId;
   db.transaction(() => {
@@ -155,10 +140,6 @@ function insertMeaningUnit(transcriptId, workflow, dayStamps, insertAtOrder) {
   return db.prepare('SELECT * FROM meaning_units WHERE id = ?').get(newId);
 }
 
-/**
- * Update all analyst-editable fields on a meaning unit.
- * day_stamps is computed by the IPC handler (timestamps.js) before calling here.
- */
 function saveMeaningUnit(mu) {
   db.prepare(`
     UPDATE meaning_units SET
@@ -169,6 +150,7 @@ function saveMeaningUnit(mu) {
       provisional_theme = ?,
       theme_color = ?,
       stage3_notes = ?,
+      assignment_rationale = ?,
       day_stamps = ?,
       updated_at = CURRENT_TIMESTAMP
     WHERE id = ?
@@ -180,15 +162,12 @@ function saveMeaningUnit(mu) {
     mu.provisional_theme || null,
     mu.theme_color || null,
     mu.stage3_notes || null,
+    mu.assignment_rationale || null,
     mu.day_stamps || null,
     mu.id
   );
 }
 
-/**
- * Immediate color-only save. Does NOT update day_stamps (color = structural tag,
- * not analyst text entry — see SPEC_v2.md §16).
- */
 function saveMeaningUnitColor({ id, theme_color }) {
   db.prepare(
     'UPDATE meaning_units SET theme_color = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?'
@@ -210,10 +189,6 @@ function reorderMeaningUnits(items) {
 // Theme highlighting
 // ---------------------------------------------------------------------------
 
-/**
- * Returns excerpts for all meaning units that have one — used by TranscriptPanel
- * to show coverage greying in Stage 2 (regardless of theme status).
- */
 function getMeaningUnitExcerpts(transcriptId) {
   return db.prepare(
     "SELECT excerpt, mu_order FROM meaning_units WHERE transcript_id = ? AND excerpt IS NOT NULL AND excerpt != '' ORDER BY mu_order"
@@ -221,8 +196,8 @@ function getMeaningUnitExcerpts(transcriptId) {
 }
 
 /**
- * Returns only rows that have both excerpt and provisional_theme set —
- * the minimum data needed for the TranscriptPanel highlight layer.
+ * Returns rows eligible for transcript highlighting.
+ * Gate: excerpt + provisional_theme + theme_color + non-empty assignment_rationale.
  */
 function getHighlightData(transcriptId) {
   return db.prepare(`
@@ -231,8 +206,63 @@ function getHighlightData(transcriptId) {
     WHERE transcript_id = ?
       AND excerpt IS NOT NULL AND excerpt != ''
       AND provisional_theme IS NOT NULL AND provisional_theme != ''
+      AND TRIM(COALESCE(assignment_rationale, '')) != ''
     ORDER BY mu_order
   `).all(transcriptId);
+}
+
+// ---------------------------------------------------------------------------
+// Reorder log
+// ---------------------------------------------------------------------------
+
+function logMUReorder({ transcriptId, reorderedAt, orderSnapshot }) {
+  const result = db.prepare(
+    'INSERT INTO mu_reorder_log (transcript_id, reordered_at, order_snapshot) VALUES (?, ?, ?)'
+  ).run(transcriptId, reorderedAt, orderSnapshot);
+  return result.lastInsertRowid;
+}
+
+function updateReorderLogNote({ id, note }) {
+  db.prepare('UPDATE mu_reorder_log SET note = ? WHERE id = ?').run(note || null, id);
+}
+
+function getReorderLog(transcriptId) {
+  return db.prepare(
+    'SELECT * FROM mu_reorder_log WHERE transcript_id = ? ORDER BY reordered_at DESC'
+  ).all(transcriptId);
+}
+
+function getAllReorderLogsForCorpus() {
+  return db.prepare(
+    'SELECT id, transcript_id, reordered_at, order_snapshot, note FROM mu_reorder_log ORDER BY transcript_id, reordered_at'
+  ).all();
+}
+
+// ---------------------------------------------------------------------------
+// Project meta / positionality
+// ---------------------------------------------------------------------------
+
+function getPositionality() {
+  const text = db.prepare("SELECT value FROM project_meta WHERE key = 'positionality'").get();
+  const createdAt = db.prepare("SELECT value FROM project_meta WHERE key = 'positionality_created_at'").get();
+  const updatedAt = db.prepare("SELECT value FROM project_meta WHERE key = 'positionality_updated_at'").get();
+  return {
+    text: text?.value || '',
+    created_at: createdAt?.value || null,
+    updated_at: updatedAt?.value || null,
+  };
+}
+
+function savePositionality(text, now) {
+  const existing = db.prepare("SELECT value FROM project_meta WHERE key = 'positionality_created_at'").get();
+  const upsert = db.prepare(
+    "INSERT INTO project_meta (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value"
+  );
+  db.transaction(() => {
+    upsert.run('positionality', text);
+    if (!existing) upsert.run('positionality_created_at', now);
+    upsert.run('positionality_updated_at', now);
+  })();
 }
 
 // ---------------------------------------------------------------------------
@@ -254,7 +284,7 @@ function getAllMeaningUnitsForCorpus() {
     SELECT
       t.participant_id, mu.workflow, mu.mu_order,
       mu.excerpt, mu.boundary_justification, mu.paraphrase, mu.analyst_note,
-      mu.provisional_theme, mu.theme_color, mu.stage3_notes,
+      mu.provisional_theme, mu.theme_color, mu.assignment_rationale, mu.stage3_notes,
       mu.day_stamps, mu.updated_at
     FROM meaning_units mu
     JOIN transcripts t ON t.id = mu.transcript_id
@@ -281,6 +311,12 @@ module.exports = {
   reorderMeaningUnits,
   getMeaningUnitExcerpts,
   getHighlightData,
+  logMUReorder,
+  updateReorderLogNote,
+  getReorderLog,
+  getAllReorderLogsForCorpus,
+  getPositionality,
+  savePositionality,
   getAllStageOutputsForCorpus,
   getAllMeaningUnitsForCorpus,
 };

@@ -292,6 +292,44 @@ function registerIPC() {
     return queries.getHighlightData(transcriptId);
   });
 
+  ipcMain.handle('meaning-units:logReorder', (event, { transcriptId, reorderedAt, orderSnapshot }) => {
+    try {
+      const id = queries.logMUReorder({ transcriptId, reorderedAt, orderSnapshot });
+      return { success: true, id };
+    } catch (err) {
+      return { error: err.message };
+    }
+  });
+
+  ipcMain.handle('meaning-units:updateReorderNote', (event, { id, note }) => {
+    try {
+      queries.updateReorderLogNote({ id, note });
+      return { success: true };
+    } catch (err) {
+      return { error: err.message };
+    }
+  });
+
+  ipcMain.handle('meaning-units:getReorderLog', (event, transcriptId) => {
+    return queries.getReorderLog(transcriptId);
+  });
+
+  // --- Project meta ---
+
+  ipcMain.handle('project:getPositionality', () => {
+    return queries.getPositionality();
+  });
+
+  ipcMain.handle('project:savePositionality', (event, text) => {
+    try {
+      const now = new Date().toISOString();
+      queries.savePositionality(text, now);
+      return { success: true, ...queries.getPositionality() };
+    } catch (err) {
+      return { error: err.message };
+    }
+  });
+
   // --- Export ---
 
   ipcMain.handle('export:singleCase', async (event, transcriptId) => {
@@ -319,7 +357,7 @@ function registerIPC() {
   });
 
   ipcMain.handle('export:corpus', async () => {
-    const { formatCorpusStageOutputs, formatCorpusMeaningUnits } = require('./src/utils/exportFormatters');
+    const { formatCorpusStageOutputs, formatCorpusMeaningUnits, formatCorpusReorderLog, formatPositionality } = require('./src/utils/exportFormatters');
 
     const result = await dialog.showOpenDialog(mainWindow, {
       properties: ['openDirectory', 'createDirectory'],
@@ -333,9 +371,13 @@ function registerIPC() {
     try {
       const allStageOutputs = queries.getAllStageOutputsForCorpus();
       const allMeaningUnits = queries.getAllMeaningUnitsForCorpus();
+      const allReorderLogs = queries.getAllReorderLogsForCorpus();
+      const positionality = queries.getPositionality();
 
       fs.writeFileSync(path.join(dir, 'corpus_stage_outputs.csv'), formatCorpusStageOutputs(allStageOutputs), 'utf-8');
       fs.writeFileSync(path.join(dir, 'corpus_meaning_units.csv'), formatCorpusMeaningUnits(allMeaningUnits), 'utf-8');
+      fs.writeFileSync(path.join(dir, 'reorder_log.csv'), formatCorpusReorderLog(allReorderLogs), 'utf-8');
+      fs.writeFileSync(path.join(dir, 'positionality.txt'), formatPositionality(positionality, currentDbPath), 'utf-8');
 
       return { success: true };
     } catch (err) {

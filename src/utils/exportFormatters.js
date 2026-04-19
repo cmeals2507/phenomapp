@@ -41,7 +41,6 @@ function formatStage3Section(meaningUnits) {
     return '(no meaning units)';
   }
 
-  // Group tagged units by theme label (case-sensitive, per spec).
   const groups = new Map();
   for (const mu of tagged) {
     const key = mu.provisional_theme;
@@ -55,7 +54,7 @@ function formatStage3Section(meaningUnits) {
     lines.push(`  ${color ? `[${color}] ` : ''}${label}`);
     for (const mu of units) {
       const id = `MU-${String(mu.mu_order).padStart(3, '0')}`;
-      lines.push(`    ${id}  Paraphrase: ${mu.paraphrase || ''}  |  Stage 3 Notes: ${mu.stage3_notes || ''}`);
+      lines.push(`    ${id}  Paraphrase: ${mu.paraphrase || ''}  |  Assignment Rationale: ${mu.assignment_rationale || ''}  |  Stage 3 Notes: ${mu.stage3_notes || ''}`);
     }
   }
 
@@ -132,10 +131,39 @@ function formatCorpusMeaningUnits(rows) {
     columns: [
       'participant_id', 'workflow', 'mu_order',
       'excerpt', 'boundary_justification', 'paraphrase', 'analyst_note',
-      'provisional_theme', 'theme_color', 'stage3_notes',
+      'provisional_theme', 'theme_color', 'assignment_rationale', 'stage3_notes',
       'day_stamps', 'updated_at',
     ],
   });
 }
 
-module.exports = { formatSingleCase, formatCorpusStageOutputs, formatCorpusMeaningUnits };
+function formatCorpusReorderLog(rows) {
+  return stringify(rows, {
+    header: true,
+    columns: ['id', 'transcript_id', 'reordered_at', 'order_snapshot', 'note'],
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Positionality .txt export
+// ---------------------------------------------------------------------------
+
+function formatPositionality(positionality, dbPath) {
+  const dbFilename = dbPath ? dbPath.split('/').pop() : 'unknown';
+  return [
+    'ANALYST POSITIONALITY STATEMENT',
+    `Project database: ${dbFilename}`,
+    `Created: ${positionality.created_at || '(not recorded)'}`,
+    `Last edited: ${positionality.updated_at || '(not recorded)'}`,
+    '',
+    positionality.text || '(no positionality record entered)',
+  ].join('\n');
+}
+
+module.exports = {
+  formatSingleCase,
+  formatCorpusStageOutputs,
+  formatCorpusMeaningUnits,
+  formatCorpusReorderLog,
+  formatPositionality,
+};
