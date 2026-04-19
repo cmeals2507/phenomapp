@@ -16,6 +16,7 @@ export default function FreeformStage({ transcript, stage, stageLabel }) {
       });
       setSaveError(false);
       setLastSavedTime(new Date().toLocaleTimeString());
+      window.dispatchEvent(new CustomEvent('phenomapp:data-saved'));
     } catch {
       setSaveError(true);
     }

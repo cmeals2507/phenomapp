@@ -7,6 +7,7 @@ export default function ProvisionalThemesStage({ transcript }) {
   const [view, setView] = useState('tagging'); // 'tagging' | 'grouped'
   const [lastSavedTime, setLastSavedTime] = useState(null);
   const [saveError, setSaveError] = useState(false);
+  const [panelSearch, setPanelSearch] = useState('');
 
   const unitsRef = useRef([]);
   const dirtyIdsRef = useRef(new Set());
@@ -16,7 +17,6 @@ export default function ProvisionalThemesStage({ transcript }) {
     unitsRef.current = units;
   }, [units]);
 
-  // Load meaning units for this transcript.
   useEffect(() => {
     async function load() {
       const mus = await window.phenomAPI.getMeaningUnits(transcript.id);
@@ -38,8 +38,8 @@ export default function ProvisionalThemesStage({ transcript }) {
       dirtyIdsRef.current.clear();
       setSaveError(false);
       setLastSavedTime(new Date().toLocaleTimeString());
-      // Signal TranscriptPanel to refresh highlights.
       window.dispatchEvent(new CustomEvent('phenomapp:highlights-changed'));
+      window.dispatchEvent(new CustomEvent('phenomapp:data-saved'));
     } catch {
       setSaveError(true);
     }
@@ -58,7 +58,6 @@ export default function ProvisionalThemesStage({ transcript }) {
     return performSave();
   }, [performSave]);
 
-  // Flush before app quits.
   useEffect(() => {
     window.addEventListener('phenomapp:flush-saves', flushSave);
     return () => window.removeEventListener('phenomapp:flush-saves', flushSave);
@@ -68,7 +67,6 @@ export default function ProvisionalThemesStage({ transcript }) {
   // Change handlers passed to child views
   // ---------------------------------------------------------------------------
 
-  // Debounced text-field change (provisional_theme, stage3_notes).
   const handleCellChange = useCallback((id, field, value) => {
     setUnits(prev => {
       const updated = prev.map(u => u.id === id ? { ...u, [field]: value } : u);
@@ -78,15 +76,14 @@ export default function ProvisionalThemesStage({ transcript }) {
     scheduleSave();
   }, [scheduleSave]);
 
-  // Immediate color save — does NOT update day_stamps.
   const handleColorChange = useCallback(async (id, color) => {
     setUnits(prev => prev.map(u => u.id === id ? { ...u, theme_color: color } : u));
     try {
       await window.phenomAPI.saveMeaningUnitColor({ id, theme_color: color });
       setLastSavedTime(new Date().toLocaleTimeString());
       setSaveError(false);
-      // Refresh highlights so new color appears in TranscriptPanel immediately.
       window.dispatchEvent(new CustomEvent('phenomapp:highlights-changed'));
+      window.dispatchEvent(new CustomEvent('phenomapp:data-saved'));
     } catch {
       setSaveError(true);
     }
@@ -98,11 +95,30 @@ export default function ProvisionalThemesStage({ transcript }) {
 
   return (
     <div className="flex flex-col h-full">
-      {/* Header with view toggle */}
-      <div className="px-3 py-2 border-b border-gray-100 bg-gray-50 shrink-0 flex items-center justify-between">
-        <span className="text-xs font-medium text-gray-600">Stage 3: Provisional Themes</span>
+      {/* Header with search + view toggle */}
+      <div className="px-3 py-2 border-b border-gray-100 bg-gray-50 shrink-0 flex items-center gap-2">
+        <span className="text-xs font-medium text-gray-600 shrink-0">Stage 3: Provisional Themes</span>
 
-        <div className="flex rounded border border-gray-200 overflow-hidden">
+        <div className="flex items-center gap-1 flex-1 justify-center">
+          <input
+            type="text"
+            value={panelSearch}
+            onChange={e => setPanelSearch(e.target.value)}
+            placeholder="Search rows..."
+            className="text-xs border border-gray-200 rounded px-2 py-0.5 focus:outline-none focus:ring-1 focus:ring-indigo-400 bg-white w-32"
+          />
+          {panelSearch && (
+            <button
+              onClick={() => setPanelSearch('')}
+              className="text-xs text-gray-400 hover:text-gray-600 px-1 leading-none"
+              title="Clear search"
+            >
+              ✕
+            </button>
+          )}
+        </div>
+
+        <div className="flex rounded border border-gray-200 overflow-hidden shrink-0">
           <button
             type="button"
             onClick={() => setView('tagging')}
@@ -135,11 +151,13 @@ export default function ProvisionalThemesStage({ transcript }) {
             units={units}
             onCellChange={handleCellChange}
             onColorChange={handleColorChange}
+            panelSearch={panelSearch}
           />
         ) : (
           <ThemeGroupedView
             units={units}
             onCellChange={handleCellChange}
+            panelSearch={panelSearch}
           />
         )}
       </div>

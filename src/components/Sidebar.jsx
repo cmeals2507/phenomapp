@@ -8,13 +8,13 @@ const WORKFLOW = {
   machine: { short: 'M',  color: 'bg-green-100 text-green-700' },
 };
 
-function CompletionDots({ count }) {
+function CompletionDots({ stages }) {
   return (
     <div className="flex gap-0.5 mt-0.5">
-      {[0, 1, 2, 3, 4].map(i => (
+      {stages.map((active, i) => (
         <div
           key={i}
-          className={`w-1.5 h-1.5 rounded-full ${i < count ? 'bg-indigo-500' : 'bg-gray-200'}`}
+          className={`w-1.5 h-1.5 rounded-full ${active ? 'bg-indigo-500' : 'bg-gray-200'}`}
         />
       ))}
     </div>
@@ -27,6 +27,13 @@ export default function Sidebar({ transcripts, selectedId, onSelectCase, onImpor
   const [dbFileName, setDbFileName] = useState('');
   const [contextMenu, setContextMenu] = useState(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [lastSaved, setLastSaved] = useState(null);
+
+  useEffect(() => {
+    const handler = () => setLastSaved(new Date().toLocaleTimeString());
+    window.addEventListener('phenomapp:data-saved', handler);
+    return () => window.removeEventListener('phenomapp:data-saved', handler);
+  }, []);
 
   const selectedTranscript = transcripts.find(t => t.id === selectedId) || null;
 
@@ -87,7 +94,13 @@ export default function Sidebar({ transcripts, selectedId, onSelectCase, onImpor
                     {wf.short}
                   </span>
                 </div>
-                <CompletionDots count={t.completed_stages || 0} />
+                <CompletionDots stages={[
+                  Boolean(t.has_memo),
+                  Boolean(t.has_meaning_units),
+                  Boolean(t.has_themes),
+                  Boolean(t.has_whole_part),
+                  Boolean(t.has_essence),
+                ]} />
               </div>
             );
           })
@@ -95,6 +108,9 @@ export default function Sidebar({ transcripts, selectedId, onSelectCase, onImpor
       </div>
 
       <div className="p-3 border-t border-gray-200 space-y-1">
+        {lastSaved && (
+          <p className="text-xs text-green-600 text-center">Saved {lastSaved}</p>
+        )}
         <button
           onClick={onExportCorpus}
           className="w-full text-xs text-gray-500 hover:text-gray-900 hover:bg-gray-100 rounded px-2 py-1.5 transition-colors text-center"

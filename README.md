@@ -58,8 +58,13 @@ The same participant can have transcripts in multiple workflow conditions — th
 - **Database switching** — open a different `.db` file or create a new one (useful for a shared Dropbox-synced database)
 - **Transcript search** — case-insensitive search within the transcript panel with ↑↓ navigation and match counter
 - **Theme highlighting** — meaning unit excerpts are highlighted in the transcript panel using their assigned theme color once Stage 3 tagging begins; toggle on/off at any time
-- **Coverage greying** — when Stage 2 is open, text in the transcript panel that has been copied into any meaning unit's excerpt field is rendered in grey, providing a live map of which parts of the transcript have been attended to
-- **MU ID tooltips** — hovering over any grey (covered) or theme-highlighted text in the transcript panel while Stage 2 is open shows the corresponding meaning unit ID(s) (e.g., `MU-007` or `MU-007, MU-008` for overlapping excerpts)
+- **Coverage highlight** — when Stage 2 is open, text in the transcript panel that has been copied into any meaning unit's excerpt field is highlighted in blue (`#27C2F5`), providing a live map of which parts of the transcript have been attended to
+- **MU ID tooltips** — hovering over any highlighted (covered) or theme-highlighted text in the transcript panel while Stage 2 is open shows the corresponding meaning unit ID(s) (e.g., `MU-007` or `MU-007, MU-008` for overlapping excerpts)
+- **Click MU ID to locate** — clicking any `MU-NNN` ID in Stage 2 or Stage 3 scrolls the transcript panel to that excerpt
+- **Stage 2 row search** — real-time search bar in the Stage 2 header filters the meaning units table across all text fields (excerpt, boundary justification, paraphrase, analyst note)
+- **Stage 3 row search** — search bar in the Stage 3 header filters both the tagging table and grouped view simultaneously, with a live match count
+- **Global save indicator** — sidebar footer shows "Saved [time]" after any auto-save fires across all stages
+- **Per-stage completion dots** — each of the five dots in the sidebar case list maps to an individual stage (Holistic Memo, Meaning Units, Themes, Whole-Part, Essence)
 - **Day-locked timestamps** — all analyst-entered content records the date and time of first edit per calendar day, included in exports
 
 ---
@@ -80,6 +85,8 @@ The meaning units table has one row per unit with these columns:
 - Rows are reorderable by drag-and-drop
 - **Right-click any row** to open a context menu with options to insert a blank row immediately above or below that row — useful when a pasted excerpt needs to be split into multiple units without scrolling to the bottom
 - The `+ Add Row` button appends a new blank row at the end
+- **Search bar** in the panel header filters visible rows in real time across all text fields; `+ Add Row` is hidden while a search is active
+- **Clicking the MU ID** (e.g. `MU-003`) in any row scrolls the transcript panel to that excerpt
 
 ---
 
@@ -89,16 +96,20 @@ Stage 3 uses a two-view interface:
 
 **View 1 — Tagging Table**
 - One row per meaning unit
+- **MU ID column** — clicking the `MU-NNN` ID scrolls the transcript panel to that excerpt
 - Read-only reference columns: Boundary Justification, Paraphrase (carried over from Stage 2)
 - Editable columns: Provisional Theme label, color (80-swatch popup picker with hex input), Stage 3 Notes
 - **Theme autocomplete** — typing in the Provisional Theme field shows a dropdown of existing theme names from the current case. Selecting a suggestion fills the theme name and automatically applies that theme's saved color to both the color picker and the transcript highlight
 - Filter by theme or tagged/untagged status; sort by original order or alphabetically by theme
+- **Search bar** in the panel header filters rows across all text fields; shows a live match count
 
 **View 2 — Grouped View**
 - Meaning units collapsed under their assigned theme label
-- Read-only reference column: Boundary Justification (from Stage 2)
+- **MU ID** shown inline; clicking it scrolls the transcript panel to that excerpt
+- Read-only reference column: Boundary Justification for tagged units, Paraphrase for untagged units
 - Stage 3 Notes editable inline
 - "Untagged" block at the bottom for units not yet assigned a theme
+- **Search bar** (shared with View 1) filters the grouped view in real time
 
 Theme grouping is **case-sensitive** — "Belonging" and "belonging" are treated as distinct themes.
 
@@ -114,11 +125,11 @@ The left panel shows the full immutable transcript. While working:
 - Overlapping excerpts show the lower-order theme's color with a small colored dot for the second theme
 - Hovering over highlighted text shows the theme label as a tooltip
 
-**Coverage greying (Stage 2)**
+**Coverage highlight (Stage 2)**
 - Active whenever the Stage 2 tab is open
-- Any transcript text that has been copied into a meaning unit's excerpt field is rendered in grey
-- Text that has both a coverage match and a theme highlight shows the theme color (color takes precedence over grey)
-- Hovering over greyed or highlighted text shows the MU ID(s): e.g., `MU-004` or `MU-004, MU-009`
+- Any transcript text that has been copied into a meaning unit's excerpt field is highlighted in blue (`#27C2F5`)
+- Text that has both a coverage match and a theme highlight shows the theme color (color takes precedence over blue)
+- Hovering over highlighted or theme-highlighted text shows the MU ID(s): e.g., `MU-004` or `MU-004, MU-009`
 - Updates live within ~3 seconds of an excerpt being saved
 
 **Matching algorithm**
@@ -272,3 +283,55 @@ The following are intentionally excluded from this version:
 - The database file persists independently of the app installation
 - Switching databases (via the DB button in the sidebar) reloads the case list without restarting the app
 - Existing v1.0 databases are automatically migrated on first launch — no data loss
+
+---
+
+## Changelog
+
+### 2026-04-19
+
+- **Global save indicator** — sidebar footer shows "Saved [time]" after any auto-save across all stages
+- **Per-stage completion dots** — each sidebar dot now maps to an individual stage (Holistic Memo, Meaning Units, Themes, Whole-Part, Essence) rather than an aggregate count
+- **Stage 2 row search** — real-time search bar in the Stage 2 header filters the meaning units table across all text fields; `+ Add Row` hides during a search
+- **Stage 3 row search** — search bar in the Stage 3 header filters both the tagging table and grouped view simultaneously with a live match count
+- **Click MU ID to locate** — clicking any `MU-NNN` ID in Stage 2 or Stage 3 scrolls the transcript panel to that excerpt
+- **Coverage color change** — covered text now highlighted in blue (`#27C2F5`) instead of grey
+- **MU ID column in Stage 3 tagging table** — `MU-NNN` ID shown as first column; click to scroll transcript
+- **Grouped view MU IDs** — `MU-NNN` IDs shown inline in Stage 3 grouped view; click to scroll transcript
+- **Grouped view shows paraphrase for untagged units** — untagged rows now display the paraphrase (instead of boundary justification) as the reference column
+- **Auto-resizing textareas** — all text cells in Stage 2 and Stage 3 grow to fit their content automatically
+- **Per-stage DB flags** — `getAllTranscripts` query now returns individual boolean columns per stage (`has_memo`, `has_meaning_units`, `has_themes`, `has_whole_part`, `has_essence`) for accurate sidebar dot rendering
+- **Performance** — memoized row components (`MURow`, `ThemeTaggingRow`, `GroupedMURow`) and `useCallback`/`useMemo` hooks reduce unnecessary re-renders
+
+### 2026-04-17 (v2.2)
+
+- **Coverage highlight** — transcript text copied into meaning unit excerpts is highlighted to show analyst coverage
+- **MU right-click insert** — right-click any Stage 2 row to insert a blank row immediately above or below
+- **Theme autocomplete carries color** — selecting an existing theme from the autocomplete dropdown also applies that theme's saved color
+- **Stage 3 column additions** — Stage 3 notes column added to the tagging table
+
+### 2026-04-04
+
+- **Ellipsis-segment highlighting** — excerpts containing `...` or `…` are split and each segment is independently located and highlighted in the transcript
+- **Exact normalized excerpt matching** — matching collapses whitespace and is case-insensitive
+- **Color picker revamp** — improved swatch layout and hex input behavior
+
+### 2026-04-03 (v2.1)
+
+- **Stage 3 theme tagging** — dedicated view for assigning provisional themes, colors, and notes to each meaning unit
+- **Transcript theme highlights** — meaning unit excerpts highlighted using assigned theme color once Stage 3 tagging begins; toggle on/off
+- **Transcript search** — case-insensitive search within the transcript panel with ↑↓ navigation and match counter
+- **Day-locked timestamps** — all analyst content records date and time of first edit per calendar day, included in exports
+- **80-swatch color picker** — square grid popup with hex input for theme color assignment
+
+### 2026-04-02 (v1.0)
+
+- **Initial release** — three-panel layout (sidebar, transcript, stage work area)
+- **Five-stage workflow** — Holistic Memo, Meaning Units, Provisional Themes, Whole-Part Reconciliation, Individual Essence
+- **Auto-save** — all stage content saves automatically every 3 seconds
+- **Import / delete** — load `.txt` transcript files with participant ID and workflow condition; remove cases via sidebar
+- **Export (single case)** — structured `.txt` file with all stage outputs; Stage 3 grouped by theme
+- **Export (corpus)** — two `.csv` files covering all cases
+- **Database switching** — open a different `.db` file or create a new one
+- **Drag-and-drop row reorder** — Stage 2 meaning units reorderable by drag-and-drop
+- **About window** — CC BY-NC-SA 4.0 license and attribution

@@ -17,27 +17,25 @@ function getAllTranscripts() {
       t.participant_id,
       t.workflow,
       t.created_at,
-      (
-        SELECT COUNT(DISTINCT so.stage)
-        FROM stage_outputs so
-        WHERE so.transcript_id = t.id
-          AND so.stage IN ('memo', 'whole_part', 'essence')
-          AND so.content IS NOT NULL AND so.content != ''
-      ) +
-      (
-        CASE WHEN EXISTS(
-          SELECT 1 FROM meaning_units mu WHERE mu.transcript_id = t.id
-        ) THEN 1 ELSE 0 END
-      ) +
-      (
-        CASE WHEN EXISTS(
-          SELECT 1 FROM meaning_units mu2
-          WHERE mu2.transcript_id = t.id
-            AND mu2.provisional_theme IS NOT NULL
-            AND mu2.provisional_theme != ''
-        ) THEN 1 ELSE 0 END
-      )
-      AS completed_stages
+      (CASE WHEN EXISTS(
+        SELECT 1 FROM stage_outputs so WHERE so.transcript_id = t.id
+          AND so.stage = 'memo' AND so.content IS NOT NULL AND so.content != ''
+      ) THEN 1 ELSE 0 END) AS has_memo,
+      (CASE WHEN EXISTS(
+        SELECT 1 FROM meaning_units mu WHERE mu.transcript_id = t.id
+      ) THEN 1 ELSE 0 END) AS has_meaning_units,
+      (CASE WHEN EXISTS(
+        SELECT 1 FROM meaning_units mu2 WHERE mu2.transcript_id = t.id
+          AND mu2.provisional_theme IS NOT NULL AND mu2.provisional_theme != ''
+      ) THEN 1 ELSE 0 END) AS has_themes,
+      (CASE WHEN EXISTS(
+        SELECT 1 FROM stage_outputs so2 WHERE so2.transcript_id = t.id
+          AND so2.stage = 'whole_part' AND so2.content IS NOT NULL AND so2.content != ''
+      ) THEN 1 ELSE 0 END) AS has_whole_part,
+      (CASE WHEN EXISTS(
+        SELECT 1 FROM stage_outputs so3 WHERE so3.transcript_id = t.id
+          AND so3.stage = 'essence' AND so3.content IS NOT NULL AND so3.content != ''
+      ) THEN 1 ELSE 0 END) AS has_essence
     FROM transcripts t
     ORDER BY t.participant_id, t.workflow
   `).all();

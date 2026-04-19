@@ -173,6 +173,35 @@ export default function TranscriptPanel({ transcript, width, onExport, showCover
   }, [computeCoverage]);
 
   // ---------------------------------------------------------------------------
+  // Scroll-to-MU (fired by Stage 2 / Stage 3 ID or theme clicks)
+  // ---------------------------------------------------------------------------
+
+  useEffect(() => {
+    const handler = (e) => {
+      const { excerpt } = e.detail || {};
+      if (!excerpt || !bodyRef.current) return;
+      const matches = findExcerptInText(excerpt, transcript.raw_text);
+      if (!matches || matches.length === 0) return;
+      const targetChar = matches[0].start;
+      const spans = Array.from(bodyRef.current.querySelectorAll('span[data-char-start]'));
+      let best = null;
+      for (const span of spans) {
+        const cs = parseInt(span.dataset.charStart, 10);
+        if (cs <= targetChar) best = span;
+        else break;
+      }
+      if (best) {
+        const container = bodyRef.current;
+        const elRect = best.getBoundingClientRect();
+        const containerRect = container.getBoundingClientRect();
+        container.scrollTop += elRect.top - containerRect.top - 16;
+      }
+    };
+    window.addEventListener('phenomapp:scroll-to-mu', handler);
+    return () => window.removeEventListener('phenomapp:scroll-to-mu', handler);
+  }, [transcript.raw_text]);
+
+  // ---------------------------------------------------------------------------
   // Search matches
   // ---------------------------------------------------------------------------
 
@@ -237,7 +266,7 @@ export default function TranscriptPanel({ transcript, width, onExport, showCover
     });
 
     if (allRanges.length === 0) {
-      return <span>{text}</span>;
+      return <span data-char-start={0}>{text}</span>;
     }
 
     const segments = splitByRanges(text, allRanges);
@@ -257,9 +286,9 @@ export default function TranscriptPanel({ transcript, width, onExport, showCover
       let title = '';
       let extraContent = null;
 
-      // Grey out excerpted-but-not-themed text (coverage without theme or search).
+      // Colour excerpted-but-not-themed text (coverage without theme or search).
       if (hasCoverage && themeRanges.length === 0 && !searchRange) {
-        style.color = '#9ca3af'; // gray-400 — still readable, just visually receded
+        style.color = '#27C2F5';
       }
 
       // Apply theme highlight (lower mu_order wins on overlap).
@@ -315,6 +344,7 @@ export default function TranscriptPanel({ transcript, width, onExport, showCover
           key={i}
           style={style}
           title={title || undefined}
+          data-char-start={seg.start}
           data-search-match={isFirstOfMatch ? searchRange.matchIndex : undefined}
         >
           {seg.text}

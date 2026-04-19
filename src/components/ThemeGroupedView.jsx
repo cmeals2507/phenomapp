@@ -1,4 +1,13 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo, memo } from 'react';
+
+function formatMUId(order) {
+  return `MU-${String(order).padStart(3, '0')}`;
+}
+
+function dispatchScrollToMU(excerpt) {
+  if (!excerpt) return;
+  window.dispatchEvent(new CustomEvent('phenomapp:scroll-to-mu', { detail: { excerpt } }));
+}
 
 const CASE_SENSITIVE_NOTE = (
   <p className="text-xs text-gray-400 mb-3">
@@ -6,12 +15,60 @@ const CASE_SENSITIVE_NOTE = (
   </p>
 );
 
-export default function ThemeGroupedView({ units, onCellChange }) {
+// Memoized row — only re-renders when its own MU data changes
+const GroupedMURow = memo(function GroupedMURow({ mu, onCellChange, isUntagged }) {
+  return (
+    <div className="flex gap-0 text-xs">
+      <div className="w-1/2 p-2 text-gray-700 leading-relaxed border-r border-gray-100 flex items-start gap-1.5">
+        <span
+          className="font-mono text-gray-400 hover:text-indigo-500 cursor-pointer shrink-0 select-none transition-colors"
+          title={mu.excerpt ? 'Click to locate in transcript' : undefined}
+          onClick={() => dispatchScrollToMU(mu.excerpt)}
+        >
+          {formatMUId(mu.mu_order)}
+        </span>
+        <span>
+          {isUntagged
+            ? (mu.paraphrase || <span className="text-gray-300 italic">—</span>)
+            : (mu.boundary_justification || <span className="text-gray-300 italic">—</span>)
+          }
+        </span>
+      </div>
+      <div className="w-1/2 p-1">
+        <textarea
+          value={mu.stage3_notes || ''}
+          onChange={e => {
+            e.target.style.height = 'auto';
+            e.target.style.height = e.target.scrollHeight + 'px';
+            onCellChange(mu.id, 'stage3_notes', e.target.value);
+          }}
+          placeholder="Stage 3 notes..."
+          ref={el => { if (el) { el.style.height = 'auto'; el.style.height = el.scrollHeight + 'px'; } }}
+          className="w-full text-xs p-1 resize-none focus:outline-none bg-transparent leading-relaxed"
+          style={{ overflow: 'hidden', minHeight: '2.5rem' }}
+        />
+      </div>
+    </div>
+  );
+});
+
+export default function ThemeGroupedView({ units, onCellChange, panelSearch }) {
   const [collapsed, setCollapsed] = useState({});
 
   const toggleCollapse = (key) => {
     setCollapsed(prev => ({ ...prev, [key]: !prev[key] }));
   };
+
+  // Apply panel search filter
+  const filteredUnits = useMemo(() => {
+    if (!panelSearch?.trim()) return units;
+    const q = panelSearch.toLowerCase();
+    return units.filter(u =>
+      ['boundary_justification', 'paraphrase', 'provisional_theme', 'stage3_notes'].some(f =>
+        (u[f] || '').toLowerCase().includes(q)
+      )
+    );
+  }, [units, panelSearch]);
 
   if (units.length === 0) {
     return (
@@ -21,12 +78,11 @@ export default function ThemeGroupedView({ units, onCellChange }) {
     );
   }
 
-  // Group by provisional_theme (case-sensitive, per spec).
-  // Order: themes in order of first appearance (lowest mu_order), then Untagged at bottom.
+  // Group filtered units by provisional_theme
   const groups = new Map();
   const untagged = [];
 
-  for (const mu of units) {
+  for (const mu of filteredUnits) {
     const label = mu.provisional_theme && mu.provisional_theme.trim() ? mu.provisional_theme : null;
     if (!label) {
       untagged.push(mu);
@@ -36,10 +92,7 @@ export default function ThemeGroupedView({ units, onCellChange }) {
     }
   }
 
-  const hasContent = groups.size > 0 || untagged.length > 0;
-
-  if (groups.size === 0 && untagged.length > 0) {
-    // No themes defined yet — show guidance.
+  if (groups.size === 0 && untagged.length > 0 && !panelSearch) {
     return (
       <div className="h-full overflow-auto p-4">
         {CASE_SENSITIVE_NOTE}
@@ -50,19 +103,28 @@ export default function ThemeGroupedView({ units, onCellChange }) {
     );
   }
 
+  if (filteredUnits.length === 0) {
+    return (
+      <div className="h-full overflow-auto p-4">
+        {CASE_SENSITIVE_NOTE}
+        <p className="text-sm text-gray-400 text-center mt-8">
+          No matching rows.
+        </p>
+      </div>
+    );
+  }
+
   return (
     <div className="h-full overflow-auto p-3">
       {CASE_SENSITIVE_NOTE}
 
       <div className="space-y-3">
-        {/* Theme groups */}
         {[...groups.entries()].map(([label, groupUnits]) => {
           const color = groupUnits[0]?.theme_color || null;
           const isCollapsed = collapsed[label];
 
           return (
             <div key={label} className="border border-gray-200 rounded">
-              {/* Block header */}
               <button
                 type="button"
                 onClick={() => toggleCollapse(label)}
@@ -79,27 +141,15 @@ export default function ThemeGroupedView({ units, onCellChange }) {
                 <span className="text-xs text-gray-400 shrink-0">({groupUnits.length})</span>
               </button>
 
-              {/* Block body */}
               {!isCollapsed && (
                 <div className="divide-y divide-gray-100">
                   {groupUnits.map(mu => (
-                    <div key={mu.id} className="flex gap-0 text-xs">
-                      {/* Boundary Justification (read-only, left half) */}
-                      <div className="w-1/2 p-2 text-gray-700 leading-relaxed border-r border-gray-100">
-                        {mu.boundary_justification || <span className="text-gray-300 italic">—</span>}
-                      </div>
-
-                      {/* Stage 3 Notes (editable, right half) */}
-                      <div className="w-1/2 p-1">
-                        <textarea
-                          value={mu.stage3_notes || ''}
-                          onChange={e => onCellChange(mu.id, 'stage3_notes', e.target.value)}
-                          placeholder="Stage 3 notes..."
-                          rows={2}
-                          className="w-full text-xs p-1 resize-none focus:outline-none bg-transparent leading-relaxed"
-                        />
-                      </div>
-                    </div>
+                    <GroupedMURow
+                      key={mu.id}
+                      mu={mu}
+                      onCellChange={onCellChange}
+                      isUntagged={false}
+                    />
                   ))}
                 </div>
               )}
@@ -107,7 +157,6 @@ export default function ThemeGroupedView({ units, onCellChange }) {
           );
         })}
 
-        {/* Untagged block */}
         {untagged.length > 0 && (
           <div className="border border-gray-200 rounded">
             <button
@@ -125,20 +174,12 @@ export default function ThemeGroupedView({ units, onCellChange }) {
             {!collapsed['__untagged__'] && (
               <div className="divide-y divide-gray-100">
                 {untagged.map(mu => (
-                  <div key={mu.id} className="flex gap-0 text-xs">
-                    <div className="w-1/2 p-2 text-gray-700 leading-relaxed border-r border-gray-100">
-                      {mu.paraphrase || <span className="text-gray-300 italic">—</span>}
-                    </div>
-                    <div className="w-1/2 p-1">
-                      <textarea
-                        value={mu.stage3_notes || ''}
-                        onChange={e => onCellChange(mu.id, 'stage3_notes', e.target.value)}
-                        placeholder="Stage 3 notes..."
-                        rows={2}
-                        className="w-full text-xs p-1 resize-none focus:outline-none bg-transparent leading-relaxed"
-                      />
-                    </div>
-                  </div>
+                  <GroupedMURow
+                    key={mu.id}
+                    mu={mu}
+                    onCellChange={onCellChange}
+                    isUntagged={true}
+                  />
                 ))}
               </div>
             )}
