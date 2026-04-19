@@ -150,7 +150,7 @@ function saveMeaningUnit(mu) {
       provisional_theme = ?,
       theme_color = ?,
       stage3_notes = ?,
-      assignment_rationale = ?,
+      thematic_interpretation = ?,
       day_stamps = ?,
       updated_at = CURRENT_TIMESTAMP
     WHERE id = ?
@@ -162,7 +162,7 @@ function saveMeaningUnit(mu) {
     mu.provisional_theme || null,
     mu.theme_color || null,
     mu.stage3_notes || null,
-    mu.assignment_rationale || null,
+    mu.thematic_interpretation || null,
     mu.day_stamps || null,
     mu.id
   );
@@ -197,7 +197,7 @@ function getMeaningUnitExcerpts(transcriptId) {
 
 /**
  * Returns rows eligible for transcript highlighting.
- * Gate: excerpt + provisional_theme + theme_color + non-empty assignment_rationale.
+ * Gate: excerpt + provisional_theme + theme_color + non-empty thematic_interpretation.
  */
 function getHighlightData(transcriptId) {
   return db.prepare(`
@@ -206,7 +206,7 @@ function getHighlightData(transcriptId) {
     WHERE transcript_id = ?
       AND excerpt IS NOT NULL AND excerpt != ''
       AND provisional_theme IS NOT NULL AND provisional_theme != ''
-      AND TRIM(COALESCE(assignment_rationale, '')) != ''
+      AND TRIM(COALESCE(thematic_interpretation, '')) != ''
     ORDER BY mu_order
   `).all(transcriptId);
 }
@@ -284,7 +284,7 @@ function getAllMeaningUnitsForCorpus() {
     SELECT
       t.participant_id, mu.workflow, mu.mu_order,
       mu.excerpt, mu.boundary_justification, mu.paraphrase, mu.analyst_note,
-      mu.provisional_theme, mu.theme_color, mu.assignment_rationale, mu.stage3_notes,
+      mu.provisional_theme, mu.theme_color, mu.thematic_interpretation, mu.stage3_notes,
       mu.day_stamps, mu.updated_at
     FROM meaning_units mu
     JOIN transcripts t ON t.id = mu.transcript_id

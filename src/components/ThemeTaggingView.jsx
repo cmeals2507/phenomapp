@@ -266,11 +266,11 @@ const CASE_SENSITIVE_NOTE = (
 // Memoized row — only re-renders when its own unit data or suggestions change
 // ---------------------------------------------------------------------------
 const ThemeTaggingRow = memo(function ThemeTaggingRow({ unit, suggestions, onCellChange, onColorChange }) {
-  // Amber indicator: theme + color set but rationale missing → highlight is blocked
-  const needsRationale = Boolean(
+  // Amber indicator: theme + color set but thematic interpretation missing → highlight is blocked
+  const needsInterpretation = Boolean(
     unit.provisional_theme?.trim() &&
     unit.theme_color &&
-    !unit.assignment_rationale?.trim()
+    !unit.thematic_interpretation?.trim()
   );
 
   return (
@@ -327,20 +327,20 @@ const ThemeTaggingRow = memo(function ThemeTaggingRow({ unit, suggestions, onCel
 
       <td className="p-1 border border-gray-200">
         <div className="flex items-start gap-1">
-          {needsRationale && (
+          {needsInterpretation && (
             <span
               className="inline-block w-2 h-2 rounded-full bg-amber-400 mt-1.5 shrink-0"
-              title="Add a rationale to activate the transcript highlight for this unit"
+              title="Add a thematic interpretation to activate the transcript highlight for this unit"
             />
           )}
           <textarea
-            value={unit.assignment_rationale || ''}
+            value={unit.thematic_interpretation || ''}
             onChange={e => {
               e.target.style.height = 'auto';
               e.target.style.height = e.target.scrollHeight + 'px';
-              onCellChange(unit.id, 'assignment_rationale', e.target.value);
+              onCellChange(unit.id, 'thematic_interpretation', e.target.value);
             }}
-            placeholder="Why does this unit belong here?"
+            placeholder="What structural feature of the lived experience does this theme describe — and how does this meaning unit illuminate it?"
             ref={el => { if (el) { el.style.height = 'auto'; el.style.height = el.scrollHeight + 'px'; } }}
             className="flex-1 text-xs p-1 resize-none focus:outline-none bg-transparent leading-relaxed"
             style={{ overflow: 'hidden', minHeight: '2.5rem' }}
@@ -391,7 +391,7 @@ export default function ThemeTaggingView({ units, onCellChange, onColorChange, p
     if (!panelSearch?.trim()) return units;
     const q = panelSearch.toLowerCase();
     return units.filter(u =>
-      ['boundary_justification', 'paraphrase', 'provisional_theme', 'assignment_rationale', 'stage3_notes'].some(f =>
+      ['boundary_justification', 'paraphrase', 'provisional_theme', 'thematic_interpretation', 'stage3_notes'].some(f =>
         (u[f] || '').toLowerCase().includes(q)
       )
     );
@@ -481,7 +481,12 @@ export default function ThemeTaggingView({ units, onCellChange, onColorChange, p
               <th className="p-2 border border-gray-200 w-1/5">Paraphrase</th>
               <th className="p-2 border border-gray-200 w-1/6">Provisional Theme</th>
               <th className="p-2 border border-gray-200 w-8 text-center">Color</th>
-              <th className="p-2 border border-gray-200 w-1/5">Assignment Rationale</th>
+              <th
+                className="p-2 border border-gray-200 w-1/5 cursor-help"
+                title="A theme is not a category; it is a way of capturing the structure of an experience. Describe what this theme names about the phenomenon, and what this unit contributes to that understanding."
+              >
+                Thematic Interpretation
+              </th>
               <th className="p-2 border border-gray-200">Stage 3 Notes</th>
             </tr>
           </thead>

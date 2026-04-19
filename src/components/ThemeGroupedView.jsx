@@ -35,8 +35,8 @@ const GroupedMURow = memo(function GroupedMURow({ mu, onCellChange, isUntagged }
             }
           </span>
         </div>
-        {!isUntagged && mu.assignment_rationale && (
-          <p className="text-gray-400 italic pl-7 leading-snug">{mu.assignment_rationale}</p>
+        {!isUntagged && mu.thematic_interpretation && (
+          <p className="text-gray-400 italic pl-7 leading-snug">{mu.thematic_interpretation}</p>
         )}
       </div>
       <div className="w-1/2 p-1">
@@ -69,7 +69,7 @@ export default function ThemeGroupedView({ units, onCellChange, panelSearch }) {
     if (!panelSearch?.trim()) return units;
     const q = panelSearch.toLowerCase();
     return units.filter(u =>
-      ['boundary_justification', 'paraphrase', 'provisional_theme', 'assignment_rationale', 'stage3_notes'].some(f =>
+      ['boundary_justification', 'paraphrase', 'provisional_theme', 'thematic_interpretation', 'stage3_notes'].some(f =>
         (u[f] || '').toLowerCase().includes(q)
       )
     );

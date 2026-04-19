@@ -54,7 +54,7 @@ function formatStage3Section(meaningUnits) {
     lines.push(`  ${color ? `[${color}] ` : ''}${label}`);
     for (const mu of units) {
       const id = `MU-${String(mu.mu_order).padStart(3, '0')}`;
-      lines.push(`    ${id}  Paraphrase: ${mu.paraphrase || ''}  |  Assignment Rationale: ${mu.assignment_rationale || ''}  |  Stage 3 Notes: ${mu.stage3_notes || ''}`);
+      lines.push(`    ${id}  Paraphrase: ${mu.paraphrase || ''}  |  Thematic Interpretation: ${mu.thematic_interpretation || ''}  |  Stage 3 Notes: ${mu.stage3_notes || ''}`);
     }
   }
 
@@ -131,7 +131,7 @@ function formatCorpusMeaningUnits(rows) {
     columns: [
       'participant_id', 'workflow', 'mu_order',
       'excerpt', 'boundary_justification', 'paraphrase', 'analyst_note',
-      'provisional_theme', 'theme_color', 'assignment_rationale', 'stage3_notes',
+      'provisional_theme', 'theme_color', 'thematic_interpretation', 'stage3_notes',
       'day_stamps', 'updated_at',
     ],
   });

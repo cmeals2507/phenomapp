@@ -74,6 +74,7 @@ function initSchema(db) {
     'ALTER TABLE meaning_units ADD COLUMN stage3_notes TEXT',
     'ALTER TABLE meaning_units ADD COLUMN day_stamps TEXT',
     'ALTER TABLE meaning_units ADD COLUMN assignment_rationale TEXT',
+    'ALTER TABLE meaning_units ADD COLUMN thematic_interpretation TEXT',
   ];
 
   for (const sql of migrations) {
