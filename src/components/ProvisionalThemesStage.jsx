@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import ThemeTaggingView from './ThemeTaggingView';
 import ThemeGroupedView from './ThemeGroupedView';
 
@@ -90,6 +90,29 @@ export default function ProvisionalThemesStage({ transcript }) {
   }, []);
 
   // ---------------------------------------------------------------------------
+  // Stable suggestions — keyed only on theme name + color so that typing in
+  // thematic_interpretation / stage3_notes does not produce a new array
+  // reference and force all ThemeTaggingRow instances to re-render.
+  // ---------------------------------------------------------------------------
+
+  const themeKey = useMemo(
+    () => units.map(u => `${u.provisional_theme || ''}:${u.theme_color || ''}`).join('|'),
+    [units]
+  );
+
+  const suggestions = useMemo(() => {
+    const seen = new Map();
+    for (const u of units) {
+      if (u.provisional_theme?.trim() && !seen.has(u.provisional_theme)) {
+        seen.set(u.provisional_theme, u.theme_color || null);
+      }
+    }
+    return [...seen.entries()]
+      .map(([label, color]) => ({ label, color }))
+      .sort((a, b) => a.label.localeCompare(b.label));
+  }, [themeKey]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ---------------------------------------------------------------------------
   // Render
   // ---------------------------------------------------------------------------
 
@@ -149,6 +172,7 @@ export default function ProvisionalThemesStage({ transcript }) {
         {view === 'tagging' ? (
           <ThemeTaggingView
             units={units}
+            suggestions={suggestions}
             onCellChange={handleCellChange}
             onColorChange={handleColorChange}
             panelSearch={panelSearch}

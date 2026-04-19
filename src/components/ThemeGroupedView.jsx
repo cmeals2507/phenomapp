@@ -1,4 +1,4 @@
-import React, { useState, useMemo, memo } from 'react';
+import React, { useState, useRef, useLayoutEffect, useMemo, memo } from 'react';
 
 function formatMUId(order) {
   return `MU-${String(order).padStart(3, '0')}`;
@@ -17,8 +17,17 @@ const CASE_SENSITIVE_NOTE = (
 
 // Memoized row — only re-renders when its own MU data changes
 const GroupedMURow = memo(function GroupedMURow({ mu, onCellChange, isUntagged }) {
+  const rowRef = useRef(null);
+  useLayoutEffect(() => {
+    if (!rowRef.current) return;
+    rowRef.current.querySelectorAll('textarea').forEach(el => {
+      el.style.height = 'auto';
+      el.style.height = el.scrollHeight + 'px';
+    });
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
   return (
-    <div className="flex gap-0 text-xs">
+    <div ref={rowRef} className="flex gap-0 text-xs">
       <div className="w-1/2 p-2 text-gray-700 leading-relaxed border-r border-gray-100 flex flex-col gap-1">
         <div className="flex items-start gap-1.5">
           <span
@@ -48,7 +57,6 @@ const GroupedMURow = memo(function GroupedMURow({ mu, onCellChange, isUntagged }
             onCellChange(mu.id, 'stage3_notes', e.target.value);
           }}
           placeholder="Stage 3 notes..."
-          ref={el => { if (el) { el.style.height = 'auto'; el.style.height = el.scrollHeight + 'px'; } }}
           className="w-full text-xs p-1 resize-none focus:outline-none bg-transparent leading-relaxed"
           style={{ overflow: 'hidden', minHeight: '2.5rem' }}
         />

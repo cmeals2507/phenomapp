@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect, useMemo, memo } from 'react';
+import React, { useState, useRef, useEffect, useLayoutEffect, useMemo, memo } from 'react';
 
 // ---------------------------------------------------------------------------
 // Color palette — 10 hue families × 8 lightness steps
@@ -273,8 +273,20 @@ const ThemeTaggingRow = memo(function ThemeTaggingRow({ unit, suggestions, onCel
     !unit.thematic_interpretation?.trim()
   );
 
+  // Set textarea heights on mount only. onChange handles resize during typing.
+  // Using useLayoutEffect (not a ref callback) prevents forced layout on every render.
+  const rowRef = useRef(null);
+  useLayoutEffect(() => {
+    if (!rowRef.current) return;
+    rowRef.current.querySelectorAll('textarea').forEach(el => {
+      el.style.height = 'auto';
+      el.style.height = el.scrollHeight + 'px';
+    });
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
   return (
     <tr
+      ref={rowRef}
       className="align-top hover:bg-gray-50"
       style={unit.theme_color ? { borderLeft: `3px solid ${unit.theme_color}` } : {}}
     >
@@ -341,7 +353,6 @@ const ThemeTaggingRow = memo(function ThemeTaggingRow({ unit, suggestions, onCel
               onCellChange(unit.id, 'thematic_interpretation', e.target.value);
             }}
             placeholder="What structural feature of the lived experience does this theme describe — and how does this meaning unit illuminate it?"
-            ref={el => { if (el) { el.style.height = 'auto'; el.style.height = el.scrollHeight + 'px'; } }}
             className="flex-1 text-xs p-1 resize-none focus:outline-none bg-transparent leading-relaxed"
             style={{ overflow: 'hidden', minHeight: '2.5rem' }}
           />
@@ -357,7 +368,6 @@ const ThemeTaggingRow = memo(function ThemeTaggingRow({ unit, suggestions, onCel
             onCellChange(unit.id, 'stage3_notes', e.target.value);
           }}
           placeholder="Notes..."
-          ref={el => { if (el) { el.style.height = 'auto'; el.style.height = el.scrollHeight + 'px'; } }}
           className="w-full text-xs p-1 resize-none focus:outline-none bg-transparent leading-relaxed"
           style={{ overflow: 'hidden', minHeight: '2.5rem' }}
         />
@@ -366,25 +376,13 @@ const ThemeTaggingRow = memo(function ThemeTaggingRow({ unit, suggestions, onCel
   );
 });
 
-export default function ThemeTaggingView({ units, onCellChange, onColorChange, panelSearch }) {
+export default function ThemeTaggingView({ units, suggestions, onCellChange, onColorChange, panelSearch }) {
   const [filterValue, setFilterValue] = useState('all');
   const [sortValue, setSortValue] = useState('original');
 
   const distinctThemes = [...new Set(
     units.map(u => u.provisional_theme).filter(t => t && t.trim())
   )].sort();
-
-  const suggestions = useMemo(() => {
-    const seen = new Map();
-    for (const u of units) {
-      if (u.provisional_theme && u.provisional_theme.trim() && !seen.has(u.provisional_theme)) {
-        seen.set(u.provisional_theme, u.theme_color || null);
-      }
-    }
-    return [...seen.entries()]
-      .map(([label, color]) => ({ label, color }))
-      .sort((a, b) => a.label.localeCompare(b.label));
-  }, [units]);
 
   // Apply panel search first
   const searchFiltered = useMemo(() => {

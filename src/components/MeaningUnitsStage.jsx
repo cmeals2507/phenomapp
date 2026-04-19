@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef, useMemo, memo } from 'react';
+import React, { useState, useEffect, useCallback, useRef, useLayoutEffect, useMemo, memo } from 'react';
 
 function formatMUId(order) {
   return `MU-${String(order).padStart(3, '0')}`;
@@ -6,8 +6,18 @@ function formatMUId(order) {
 
 // Memoized row — only re-renders when its own unit data changes
 const MURow = memo(function MURow({ unit, onCellChange, onDelete, onDragStart, onDragEnter, onDragEnd, onContextMenu }) {
+  const rowRef = useRef(null);
+  useLayoutEffect(() => {
+    if (!rowRef.current) return;
+    rowRef.current.querySelectorAll('textarea').forEach(el => {
+      el.style.height = 'auto';
+      el.style.height = el.scrollHeight + 'px';
+    });
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
   return (
     <tr
+      ref={rowRef}
       draggable
       onDragStart={() => onDragStart(unit.id)}
       onDragEnter={() => onDragEnter(unit.id)}
@@ -35,7 +45,6 @@ const MURow = memo(function MURow({ unit, onCellChange, onDelete, onDragStart, o
               e.target.style.height = e.target.scrollHeight + 'px';
               onCellChange(unit.id, field, e.target.value);
             }}
-            ref={el => { if (el) { el.style.height = 'auto'; el.style.height = el.scrollHeight + 'px'; } }}
             className="w-full text-xs p-1 resize-none focus:outline-none bg-transparent leading-relaxed"
             style={{ overflow: 'hidden', minHeight: '5rem' }}
           />
