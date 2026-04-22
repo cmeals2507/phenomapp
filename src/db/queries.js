@@ -103,7 +103,7 @@ function saveStageOutput(transcriptId, stage, content, dayStamps) {
 
 function getMeaningUnits(transcriptId) {
   return db.prepare(
-    'SELECT * FROM meaning_units WHERE transcript_id = ? ORDER BY mu_order'
+    'SELECT * FROM meaning_units WHERE transcript_id = ? ORDER BY display_order'
   ).all(transcriptId);
 }
 
@@ -112,13 +112,16 @@ function getMeaningUnitById(id) {
 }
 
 function addMeaningUnit(transcriptId, workflow, dayStamps) {
-  const { max_order } = db.prepare(
-    'SELECT COALESCE(MAX(mu_order), 0) as max_order FROM meaning_units WHERE transcript_id = ?'
+  const { max_mu } = db.prepare(
+    'SELECT COALESCE(MAX(mu_order), 0) as max_mu FROM meaning_units WHERE transcript_id = ?'
+  ).get(transcriptId);
+  const { max_display } = db.prepare(
+    'SELECT COALESCE(MAX(display_order), 0) as max_display FROM meaning_units WHERE transcript_id = ?'
   ).get(transcriptId);
 
   const result = db.prepare(
-    'INSERT INTO meaning_units (transcript_id, workflow, mu_order, day_stamps) VALUES (?, ?, ?, ?)'
-  ).run(transcriptId, workflow, max_order + 1, dayStamps);
+    'INSERT INTO meaning_units (transcript_id, workflow, mu_order, display_order, day_stamps) VALUES (?, ?, ?, ?, ?)'
+  ).run(transcriptId, workflow, max_mu + 1, max_display + 1, dayStamps);
 
   return db.prepare('SELECT * FROM meaning_units WHERE id = ?').get(result.lastInsertRowid);
 }
@@ -126,13 +129,18 @@ function addMeaningUnit(transcriptId, workflow, dayStamps) {
 function insertMeaningUnit(transcriptId, workflow, dayStamps, insertAtOrder) {
   let newId;
   db.transaction(() => {
+    // Shift display_order only — mu_order (canonical ID) is never renumbered.
     db.prepare(
-      'UPDATE meaning_units SET mu_order = mu_order + 1 WHERE transcript_id = ? AND mu_order >= ?'
+      'UPDATE meaning_units SET display_order = display_order + 1 WHERE transcript_id = ? AND display_order >= ?'
     ).run(transcriptId, insertAtOrder);
 
+    const { max_mu } = db.prepare(
+      'SELECT COALESCE(MAX(mu_order), 0) as max_mu FROM meaning_units WHERE transcript_id = ?'
+    ).get(transcriptId);
+
     const result = db.prepare(
-      'INSERT INTO meaning_units (transcript_id, workflow, mu_order, day_stamps) VALUES (?, ?, ?, ?)'
-    ).run(transcriptId, workflow, insertAtOrder, dayStamps);
+      'INSERT INTO meaning_units (transcript_id, workflow, mu_order, display_order, day_stamps) VALUES (?, ?, ?, ?, ?)'
+    ).run(transcriptId, workflow, max_mu + 1, insertAtOrder, dayStamps);
 
     newId = result.lastInsertRowid;
   })();
@@ -179,9 +187,9 @@ function deleteMeaningUnit(id) {
 }
 
 function reorderMeaningUnits(items) {
-  const update = db.prepare('UPDATE meaning_units SET mu_order = ? WHERE id = ?');
+  const update = db.prepare('UPDATE meaning_units SET display_order = ? WHERE id = ?');
   db.transaction((items) => {
-    for (const item of items) update.run(item.mu_order, item.id);
+    for (const item of items) update.run(item.display_order, item.id);
   })(items);
 }
 
@@ -282,13 +290,13 @@ function getAllStageOutputsForCorpus() {
 function getAllMeaningUnitsForCorpus() {
   return db.prepare(`
     SELECT
-      t.participant_id, mu.workflow, mu.mu_order,
+      t.participant_id, mu.workflow, mu.mu_order, mu.display_order,
       mu.excerpt, mu.boundary_justification, mu.paraphrase, mu.analyst_note,
       mu.provisional_theme, mu.theme_color, mu.thematic_interpretation, mu.stage3_notes,
       mu.day_stamps, mu.updated_at
     FROM meaning_units mu
     JOIN transcripts t ON t.id = mu.transcript_id
-    ORDER BY t.participant_id, mu.workflow, mu.mu_order
+    ORDER BY t.participant_id, mu.workflow, mu.display_order
   `).all();
 }
 

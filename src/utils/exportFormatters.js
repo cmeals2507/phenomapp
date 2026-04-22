@@ -129,7 +129,7 @@ function formatCorpusMeaningUnits(rows) {
   return stringify(rows, {
     header: true,
     columns: [
-      'participant_id', 'workflow', 'mu_order',
+      'participant_id', 'workflow', 'mu_order', 'display_order',
       'excerpt', 'boundary_justification', 'paraphrase', 'analyst_note',
       'provisional_theme', 'theme_color', 'thematic_interpretation', 'stage3_notes',
       'day_stamps', 'updated_at',

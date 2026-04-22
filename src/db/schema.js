@@ -36,6 +36,7 @@ function initSchema(db) {
       transcript_id           INTEGER NOT NULL,
       workflow                TEXT NOT NULL,
       mu_order                INTEGER NOT NULL,
+      display_order           INTEGER,
       excerpt                 TEXT,
       boundary_justification  TEXT,
       paraphrase              TEXT,
@@ -75,11 +76,17 @@ function initSchema(db) {
     'ALTER TABLE meaning_units ADD COLUMN day_stamps TEXT',
     'ALTER TABLE meaning_units ADD COLUMN assignment_rationale TEXT',
     'ALTER TABLE meaning_units ADD COLUMN thematic_interpretation TEXT',
+    'ALTER TABLE meaning_units ADD COLUMN display_order INTEGER',
   ];
 
   for (const sql of migrations) {
     try { db.exec(sql); } catch { /* column already exists — ignore */ }
   }
+
+  // Backfill display_order for rows added before this migration.
+  try {
+    db.exec('UPDATE meaning_units SET display_order = mu_order WHERE display_order IS NULL');
+  } catch {}
 }
 
 module.exports = { initSchema };

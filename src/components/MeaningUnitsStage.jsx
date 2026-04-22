@@ -103,12 +103,15 @@ function ReorderLogEntry({ entry, units }) {
   );
 }
 
+const MAX_UNDO = 3;
+
 export default function MeaningUnitsStage({ transcript }) {
   const [units, setUnits] = useState([]);
   const [lastSavedTime, setLastSavedTime] = useState(null);
   const [saveError, setSaveError] = useState(false);
   const [contextMenu, setContextMenu] = useState({ visible: false, x: 0, y: 0, unitId: null });
   const [panelSearch, setPanelSearch] = useState('');
+  const [canUndo, setCanUndo] = useState(false);
 
   // Reorder audit log state
   const [reorderNote, setReorderNote] = useState(null); // { logId, text, visible }
@@ -120,6 +123,8 @@ export default function MeaningUnitsStage({ transcript }) {
   const saveTimerRef = useRef(null);
   const dragItem = useRef(null);
   const dragOverItem = useRef(null);
+  // Undo stack: each entry is a snapshot of [{id, display_order}] before a reorder.
+  const undoStackRef = useRef([]);
 
   useEffect(() => {
     unitsRef.current = units;
@@ -131,10 +136,12 @@ export default function MeaningUnitsStage({ transcript }) {
       setUnits(mus);
     }
     load();
-    // Reset log state when transcript changes
+    // Reset per-transcript state
     setReorderNote(null);
     setShowHistory(false);
     setReorderHistory(null);
+    undoStackRef.current = [];
+    setCanUndo(false);
   }, [transcript.id]);
 
   useEffect(() => {
@@ -196,6 +203,73 @@ export default function MeaningUnitsStage({ transcript }) {
     return () => window.removeEventListener('phenomapp:flush-saves', flushSave);
   }, [flushSave]);
 
+  // ---------------------------------------------------------------------------
+  // Undo helpers
+  // ---------------------------------------------------------------------------
+
+  const pushUndo = useCallback((currentUnits) => {
+    const snapshot = currentUnits.map(u => ({ id: u.id, display_order: u.display_order }));
+    undoStackRef.current = [...undoStackRef.current, snapshot].slice(-MAX_UNDO);
+    setCanUndo(true);
+  }, []);
+
+  const handleUndo = useCallback(async () => {
+    if (undoStackRef.current.length === 0) return;
+    const prevState = undoStackRef.current[undoStackRef.current.length - 1];
+    undoStackRef.current = undoStackRef.current.slice(0, -1);
+    setCanUndo(undoStackRef.current.length > 0);
+
+    const current = unitsRef.current;
+    const restored = current
+      .map(u => {
+        const prev = prevState.find(p => p.id === u.id);
+        return prev ? { ...u, display_order: prev.display_order } : u;
+      })
+      .sort((a, b) => a.display_order - b.display_order);
+
+    setUnits(restored);
+    await window.phenomAPI.reorderMeaningUnits(
+      restored.map(u => ({ id: u.id, display_order: u.display_order }))
+    );
+
+    const now = new Date().toISOString();
+    const result = await window.phenomAPI.logMUReorder({
+      transcriptId: transcript.id,
+      reorderedAt: now,
+      orderSnapshot: JSON.stringify(restored.map(u => u.id)),
+    });
+    if (result?.id) {
+      await window.phenomAPI.updateReorderLogNote({ id: result.id, note: 'undo' });
+    }
+
+    window.dispatchEvent(new CustomEvent('phenomapp:coverage-changed'));
+    setLastSavedTime(new Date().toLocaleTimeString());
+  }, [transcript.id]);
+
+  // Cmd+Z outside text fields → app-level undo
+  useEffect(() => {
+    const handler = (e) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === 'z' && !e.shiftKey) {
+        const active = document.activeElement;
+        const isTextField = active && (
+          active.tagName === 'INPUT' ||
+          active.tagName === 'TEXTAREA' ||
+          active.isContentEditable
+        );
+        if (!isTextField && undoStackRef.current.length > 0) {
+          e.preventDefault();
+          handleUndo();
+        }
+      }
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [handleUndo]);
+
+  // ---------------------------------------------------------------------------
+  // Cell and row handlers
+  // ---------------------------------------------------------------------------
+
   const handleCellChange = useCallback((id, field, value) => {
     setUnits(prev => {
       const updated = prev.map(u => u.id === id ? { ...u, [field]: value } : u);
@@ -214,13 +288,13 @@ export default function MeaningUnitsStage({ transcript }) {
     setUnits(prev => [...prev, newMU]);
   };
 
-  const handleInsertAt = useCallback(async (insertAtOrder) => {
+  const handleInsertAt = useCallback(async (insertAtDisplayOrder) => {
     setContextMenu(c => ({ ...c, visible: false }));
     await flushSave();
     await window.phenomAPI.insertMeaningUnitAt({
       transcriptId: transcript.id,
       workflow: transcript.workflow,
-      insertAtOrder,
+      insertAtOrder: insertAtDisplayOrder,
     });
     const mus = await window.phenomAPI.getMeaningUnits(transcript.id);
     setUnits(mus);
@@ -254,15 +328,19 @@ export default function MeaningUnitsStage({ transcript }) {
     const toIdx = current.findIndex(u => u.id === toId);
     if (fromIdx === -1 || toIdx === -1) return;
 
+    // Snapshot before change for undo
+    pushUndo(current);
+
     const newUnits = [...current];
     const [moved] = newUnits.splice(fromIdx, 1);
     newUnits.splice(toIdx, 0, moved);
 
-    const reordered = newUnits.map((u, i) => ({ ...u, mu_order: i + 1 }));
+    // Assign sequential display_orders — mu_order (canonical ID) is never touched.
+    const reordered = newUnits.map((u, i) => ({ ...u, display_order: i + 1 }));
     setUnits(reordered);
 
     await window.phenomAPI.reorderMeaningUnits(
-      reordered.map(u => ({ id: u.id, mu_order: u.mu_order }))
+      reordered.map(u => ({ id: u.id, display_order: u.display_order }))
     );
 
     // Log the reorder event
@@ -278,7 +356,36 @@ export default function MeaningUnitsStage({ transcript }) {
     }
 
     setLastSavedTime(new Date().toLocaleTimeString());
-  }, [transcript.id]);
+  }, [transcript.id, pushUndo]);
+
+  // Reset display_order to canonical mu_order sequence
+  const handleSortByMUId = useCallback(async () => {
+    const current = unitsRef.current;
+    const sorted = [...current].sort((a, b) => a.mu_order - b.mu_order);
+    const alreadySorted = current.every((u, i) => u.id === sorted[i].id);
+    if (alreadySorted) return;
+
+    pushUndo(current);
+    const reordered = sorted.map((u, i) => ({ ...u, display_order: i + 1 }));
+    setUnits(reordered);
+
+    await window.phenomAPI.reorderMeaningUnits(
+      reordered.map(u => ({ id: u.id, display_order: u.display_order }))
+    );
+
+    const now = new Date().toISOString();
+    const result = await window.phenomAPI.logMUReorder({
+      transcriptId: transcript.id,
+      reorderedAt: now,
+      orderSnapshot: JSON.stringify(reordered.map(u => u.id)),
+    });
+    if (result?.id) {
+      await window.phenomAPI.updateReorderLogNote({ id: result.id, note: 'sorted by MU-ID' });
+    }
+
+    window.dispatchEvent(new CustomEvent('phenomapp:coverage-changed'));
+    setLastSavedTime(new Date().toLocaleTimeString());
+  }, [transcript.id, pushUndo]);
 
   const handleSaveReorderNote = useCallback(async () => {
     if (!reorderNote?.logId) return;
@@ -319,6 +426,22 @@ export default function MeaningUnitsStage({ transcript }) {
       <div className="px-3 py-2 border-b border-gray-100 bg-gray-50 shrink-0 flex items-center gap-2">
         <span className="text-xs font-medium text-gray-600 shrink-0">Stage 2: Meaning Units</span>
         <div className="ml-auto flex items-center gap-1">
+          {canUndo && (
+            <button
+              onClick={handleUndo}
+              title={`Undo last reorder (${undoStackRef.current.length} step${undoStackRef.current.length !== 1 ? 's' : ''} available) — or press ⌘Z`}
+              className="text-xs px-2 py-0.5 rounded border border-gray-200 text-gray-500 hover:bg-gray-100 hover:text-gray-700 shrink-0"
+            >
+              Undo
+            </button>
+          )}
+          <button
+            onClick={handleSortByMUId}
+            title="Reset display order to canonical MU-ID creation order"
+            className="text-xs px-2 py-0.5 rounded border border-gray-200 text-gray-500 hover:bg-gray-100 hover:text-gray-700 shrink-0"
+          >
+            Sort by MU-ID
+          </button>
           <input
             type="text"
             value={panelSearch}
@@ -342,7 +465,7 @@ export default function MeaningUnitsStage({ transcript }) {
         <table className="w-full text-xs border-collapse">
           <thead>
             <tr className="text-left text-gray-500 bg-gray-50 sticky top-0">
-              <th className="p-2 border border-gray-200 w-14 text-center">ID</th>
+              <th className="p-2 border border-gray-200 w-14 text-center" title="Canonical ID — never changes on reorder">ID</th>
               <th className="p-2 border border-gray-200 w-1/4">Excerpt</th>
               <th className="p-2 border border-gray-200 w-1/4">Boundary Justification</th>
               <th className="p-2 border border-gray-200 w-1/4">Paraphrase</th>
@@ -455,13 +578,13 @@ export default function MeaningUnitsStage({ transcript }) {
         >
           <button
             className="block w-full text-left px-4 py-1.5 hover:bg-gray-100 text-gray-700"
-            onClick={() => handleInsertAt(contextUnit.mu_order)}
+            onClick={() => handleInsertAt(contextUnit.display_order)}
           >
             Add row above
           </button>
           <button
             className="block w-full text-left px-4 py-1.5 hover:bg-gray-100 text-gray-700"
-            onClick={() => handleInsertAt(contextUnit.mu_order + 1)}
+            onClick={() => handleInsertAt(contextUnit.display_order + 1)}
           >
             Add row below
           </button>
