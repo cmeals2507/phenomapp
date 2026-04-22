@@ -19,8 +19,21 @@
 // Internal helpers
 // ---------------------------------------------------------------------------
 
+/**
+ * Replace typographic variants with ASCII equivalents before comparison.
+ * All substitutions are 1-to-1 (one Unicode code point → one ASCII char) so
+ * character positions are preserved — indexMap entries stay valid offsets
+ * into the original rawText string.
+ */
+function canonicalize(s) {
+  return s
+    .replace(/[‘’‚‛′‵ʼ]/g, "'") // curly/typographic single quotes
+    .replace(/[“”„‟″‶]/g, '"')        // curly/typographic double quotes
+    .replace(/[–—―−‐‑﹘﹣－]/g, '-'); // en-dash, em-dash, variants
+}
+
 function normalize(s) {
-  return s.replace(/\s+/g, ' ').trim().toLowerCase();
+  return canonicalize(s).replace(/\s+/g, ' ').trim().toLowerCase();
 }
 
 /**
@@ -28,12 +41,14 @@ function normalize(s) {
  * indexMap[normIdx] gives the original rawText character index.
  */
 function buildNormalized(rawText) {
+  // Canonicalize first — 1-to-1 substitution so all positions are preserved.
+  const text = canonicalize(rawText);
   let normalized = '';
   const indexMap = [];
   let lastWasSpace = true;
 
-  for (let i = 0; i < rawText.length; i++) {
-    const ch = rawText[i];
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
     if (/\s/.test(ch)) {
       if (!lastWasSpace) {
         normalized += ' ';

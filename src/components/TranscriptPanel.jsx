@@ -288,7 +288,7 @@ export default function TranscriptPanel({ transcript, width, onExport, showCover
 
       // Colour excerpted-but-not-themed text (coverage without theme or search).
       if (hasCoverage && themeRanges.length === 0 && !searchRange) {
-        style.color = '#27C2F5';
+        style.color = '#1F75F0';
       }
 
       // Apply theme highlight (lower mu_order wins on overlap).
