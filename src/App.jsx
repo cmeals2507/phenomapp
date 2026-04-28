@@ -101,6 +101,7 @@ export default function App() {
         onImport={handleImport}
         onDelete={handleDelete}
         onExportCorpus={() => window.phenomAPI.exportCorpus()}
+        onExportCorpusJson={() => window.phenomAPI.exportCorpusJson()}
         onDbSwitch={handleDbSwitch}
       />
       {selectedTranscript ? (

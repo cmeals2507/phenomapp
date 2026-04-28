@@ -1,11 +1,12 @@
 import React, { useState, useEffect, useCallback, useRef, useLayoutEffect, useMemo, memo } from 'react';
+import MemoLinkModal from './MemoLinkModal';
 
 function formatMUId(order) {
   return `MU-${String(order).padStart(3, '0')}`;
 }
 
 // Memoized row — only re-renders when its own unit data changes
-const MURow = memo(function MURow({ unit, onCellChange, onDelete, onDragStart, onDragEnter, onDragEnd, onContextMenu }) {
+const MURow = memo(function MURow({ unit, hasMemoLink, onCellChange, onDelete, onDragStart, onDragEnter, onDragEnd, onContextMenu, onOpenMemoLink }) {
   const rowRef = useRef(null);
   useLayoutEffect(() => {
     if (!rowRef.current) return;
@@ -26,15 +27,32 @@ const MURow = memo(function MURow({ unit, onCellChange, onDelete, onDragStart, o
       onContextMenu={e => onContextMenu(e, unit.id)}
       className="hover:bg-gray-50 cursor-grab active:cursor-grabbing"
     >
-      <td
-        className="p-2 border border-gray-200 text-gray-400 font-mono text-center align-top select-none cursor-pointer hover:text-indigo-500 hover:bg-indigo-50 transition-colors"
-        title={unit.excerpt ? 'Click to locate in transcript' : undefined}
-        onClick={() => {
-          if (!unit.excerpt) return;
-          window.dispatchEvent(new CustomEvent('phenomapp:scroll-to-mu', { detail: { excerpt: unit.excerpt } }));
-        }}
-      >
-        {formatMUId(unit.mu_order)}
+      <td className="p-2 border border-gray-200 text-center align-top select-none">
+        <div className="flex flex-col items-center gap-1.5">
+          <span
+            className="text-gray-400 font-mono text-xs cursor-pointer hover:text-indigo-500 transition-colors rounded px-0.5"
+            title={unit.excerpt ? 'Click to locate in transcript' : undefined}
+            onClick={() => {
+              if (!unit.excerpt) return;
+              window.dispatchEvent(new CustomEvent('phenomapp:scroll-to-mu', { detail: { excerpt: unit.excerpt } }));
+            }}
+          >
+            {formatMUId(unit.mu_order)}
+          </span>
+          <button
+            onClick={() => onOpenMemoLink(unit.id, unit.mu_order)}
+            className={`w-2.5 h-2.5 rounded-full transition-colors ${
+              hasMemoLink
+                ? 'bg-green-500 hover:bg-green-600'
+                : 'bg-orange-400 hover:bg-orange-500'
+            }`}
+            title={
+              hasMemoLink
+                ? 'Memo linked — highlight active. Click to manage links.'
+                : 'No memo link — highlight inactive. Click to link a holistic memo passage.'
+            }
+          />
+        </div>
       </td>
       {['excerpt', 'boundary_justification', 'paraphrase', 'analyst_note'].map(field => (
         <td key={field} className="p-1 border border-gray-200 align-top">
@@ -113,6 +131,10 @@ export default function MeaningUnitsStage({ transcript }) {
   const [panelSearch, setPanelSearch] = useState('');
   const [canUndo, setCanUndo] = useState(false);
 
+  // Memo link state
+  const [memoLinkedIds, setMemoLinkedIds] = useState(new Set()); // Set of mu_id with ≥1 link
+  const [memoLinkTarget, setMemoLinkTarget] = useState(null); // { muId, muOrder }
+
   // Reorder audit log state
   const [reorderNote, setReorderNote] = useState(null); // { logId, text, visible }
   const [showHistory, setShowHistory] = useState(false);
@@ -130,19 +152,33 @@ export default function MeaningUnitsStage({ transcript }) {
     unitsRef.current = units;
   }, [units]);
 
+  const loadMemoLinks = useCallback(async () => {
+    const links = await window.phenomAPI.getMemoLinks(transcript.id);
+    setMemoLinkedIds(new Set(links.map(l => l.mu_id)));
+  }, [transcript.id]);
+
   useEffect(() => {
     async function load() {
       const mus = await window.phenomAPI.getMeaningUnits(transcript.id);
       setUnits(mus);
     }
     load();
+    loadMemoLinks();
     // Reset per-transcript state
+    setMemoLinkTarget(null);
     setReorderNote(null);
     setShowHistory(false);
     setReorderHistory(null);
     undoStackRef.current = [];
     setCanUndo(false);
-  }, [transcript.id]);
+  }, [transcript.id, loadMemoLinks]);
+
+  // Refresh link indicators when MemoLinkModal makes changes
+  useEffect(() => {
+    const handler = () => loadMemoLinks();
+    window.addEventListener('phenomapp:memo-links-changed', handler);
+    return () => window.removeEventListener('phenomapp:memo-links-changed', handler);
+  }, [loadMemoLinks]);
 
   useEffect(() => {
     if (!contextMenu.visible) return;
@@ -279,6 +315,10 @@ export default function MeaningUnitsStage({ transcript }) {
     });
     scheduleSave();
   }, [scheduleSave]);
+
+  const handleOpenMemoLink = useCallback((muId, muOrder) => {
+    setMemoLinkTarget({ muId, muOrder });
+  }, []);
 
   const handleAddRow = async () => {
     const newMU = await window.phenomAPI.addMeaningUnit({
@@ -478,12 +518,14 @@ export default function MeaningUnitsStage({ transcript }) {
               <MURow
                 key={unit.id}
                 unit={unit}
+                hasMemoLink={memoLinkedIds.has(unit.id)}
                 onCellChange={handleCellChange}
                 onDelete={handleDelete}
                 onDragStart={handleDragStart}
                 onDragEnter={handleDragEnter}
                 onDragEnd={handleDragEnd}
                 onContextMenu={handleRowContextMenu}
+                onOpenMemoLink={handleOpenMemoLink}
               />
             ))}
           </tbody>
@@ -589,6 +631,19 @@ export default function MeaningUnitsStage({ transcript }) {
             Add row below
           </button>
         </div>
+      )}
+
+      {memoLinkTarget && (
+        <MemoLinkModal
+          transcriptId={transcript.id}
+          muId={memoLinkTarget.muId}
+          muOrder={memoLinkTarget.muOrder}
+          unit={units.find(u => u.id === memoLinkTarget.muId)}
+          stage="stage2"
+          onClose={() => setMemoLinkTarget(null)}
+          onLinksChanged={loadMemoLinks}
+          onCellChange={handleCellChange}
+        />
       )}
     </div>
   );

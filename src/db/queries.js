@@ -47,6 +47,7 @@ function getTranscript(id) {
 
 function deleteTranscript(id) {
   db.transaction(() => {
+    db.prepare('DELETE FROM memo_mu_links WHERE transcript_id = ?').run(id);
     db.prepare('DELETE FROM mu_reorder_log WHERE transcript_id = ?').run(id);
     db.prepare('DELETE FROM meaning_units WHERE transcript_id = ?').run(id);
     db.prepare('DELETE FROM stage_outputs WHERE transcript_id = ?').run(id);
@@ -183,7 +184,10 @@ function saveMeaningUnitColor({ id, theme_color }) {
 }
 
 function deleteMeaningUnit(id) {
-  db.prepare('DELETE FROM meaning_units WHERE id = ?').run(id);
+  db.transaction(() => {
+    db.prepare('DELETE FROM memo_mu_links WHERE mu_id = ?').run(id);
+    db.prepare('DELETE FROM meaning_units WHERE id = ?').run(id);
+  })();
 }
 
 function reorderMeaningUnits(items) {
@@ -198,9 +202,15 @@ function reorderMeaningUnits(items) {
 // ---------------------------------------------------------------------------
 
 function getMeaningUnitExcerpts(transcriptId) {
-  return db.prepare(
-    "SELECT excerpt, mu_order FROM meaning_units WHERE transcript_id = ? AND excerpt IS NOT NULL AND excerpt != '' ORDER BY mu_order"
-  ).all(transcriptId);
+  // Only return excerpts for MUs that have earned the highlight via a memo link.
+  return db.prepare(`
+    SELECT mu.excerpt, mu.mu_order
+    FROM meaning_units mu
+    WHERE mu.transcript_id = ?
+      AND mu.excerpt IS NOT NULL AND mu.excerpt != ''
+      AND EXISTS (SELECT 1 FROM memo_mu_links ml WHERE ml.mu_id = mu.id)
+    ORDER BY mu.mu_order
+  `).all(transcriptId);
 }
 
 /**
@@ -217,6 +227,32 @@ function getHighlightData(transcriptId) {
       AND TRIM(COALESCE(thematic_interpretation, '')) != ''
     ORDER BY mu_order
   `).all(transcriptId);
+}
+
+// ---------------------------------------------------------------------------
+// Memo ↔ Meaning Unit links
+// ---------------------------------------------------------------------------
+
+function getMemoLinks(transcriptId) {
+  return db.prepare(`
+    SELECT ml.id, ml.transcript_id, ml.mu_id, ml.memo_start, ml.memo_end, ml.memo_excerpt,
+           mu.mu_order
+    FROM memo_mu_links ml
+    JOIN meaning_units mu ON mu.id = ml.mu_id
+    WHERE ml.transcript_id = ?
+    ORDER BY ml.mu_id, ml.memo_start
+  `).all(transcriptId);
+}
+
+function addMemoLink({ transcriptId, muId, memoStart, memoEnd, memoExcerpt }) {
+  const result = db.prepare(
+    'INSERT INTO memo_mu_links (transcript_id, mu_id, memo_start, memo_end, memo_excerpt) VALUES (?, ?, ?, ?, ?)'
+  ).run(transcriptId, muId, memoStart, memoEnd, memoExcerpt);
+  return { id: result.lastInsertRowid };
+}
+
+function deleteMemoLink(id) {
+  db.prepare('DELETE FROM memo_mu_links WHERE id = ?').run(id);
 }
 
 // ---------------------------------------------------------------------------
@@ -300,6 +336,14 @@ function getAllMeaningUnitsForCorpus() {
   `).all();
 }
 
+function getAllTranscriptsForCorpus() {
+  return db.prepare(`
+    SELECT id, participant_id, workflow, raw_text, created_at
+    FROM transcripts
+    ORDER BY participant_id, workflow
+  `).all();
+}
+
 module.exports = {
   setDb,
   getAllTranscripts,
@@ -319,6 +363,9 @@ module.exports = {
   reorderMeaningUnits,
   getMeaningUnitExcerpts,
   getHighlightData,
+  getMemoLinks,
+  addMemoLink,
+  deleteMemoLink,
   logMUReorder,
   updateReorderLogNote,
   getReorderLog,
@@ -327,4 +374,5 @@ module.exports = {
   savePositionality,
   getAllStageOutputsForCorpus,
   getAllMeaningUnitsForCorpus,
+  getAllTranscriptsForCorpus,
 };

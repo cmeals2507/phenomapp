@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import ThemeTaggingView from './ThemeTaggingView';
 import ThemeGroupedView from './ThemeGroupedView';
+import MemoLinkModal from './MemoLinkModal';
 
 export default function ProvisionalThemesStage({ transcript }) {
   const [units, setUnits] = useState([]);
@@ -8,6 +9,7 @@ export default function ProvisionalThemesStage({ transcript }) {
   const [lastSavedTime, setLastSavedTime] = useState(null);
   const [saveError, setSaveError] = useState(false);
   const [panelSearch, setPanelSearch] = useState('');
+  const [memoLinkTarget, setMemoLinkTarget] = useState(null); // { muId, muOrder }
 
   const unitsRef = useRef([]);
   const dirtyIdsRef = useRef(new Set());
@@ -23,6 +25,7 @@ export default function ProvisionalThemesStage({ transcript }) {
       setUnits(mus);
     }
     load();
+    setMemoLinkTarget(null);
   }, [transcript.id]);
 
   // ---------------------------------------------------------------------------
@@ -87,6 +90,10 @@ export default function ProvisionalThemesStage({ transcript }) {
     } catch {
       setSaveError(true);
     }
+  }, []);
+
+  const handleOpenModal = useCallback((muId, muOrder) => {
+    setMemoLinkTarget({ muId, muOrder });
   }, []);
 
   // ---------------------------------------------------------------------------
@@ -175,6 +182,7 @@ export default function ProvisionalThemesStage({ transcript }) {
             suggestions={suggestions}
             onCellChange={handleCellChange}
             onColorChange={handleColorChange}
+            onOpenModal={handleOpenModal}
             panelSearch={panelSearch}
           />
         ) : (
@@ -194,6 +202,20 @@ export default function ProvisionalThemesStage({ transcript }) {
           ? `Last saved ${lastSavedTime}`
           : 'Not yet saved'}
       </div>
+
+      {memoLinkTarget && (
+        <MemoLinkModal
+          transcriptId={transcript.id}
+          muId={memoLinkTarget.muId}
+          muOrder={memoLinkTarget.muOrder}
+          unit={units.find(u => u.id === memoLinkTarget.muId)}
+          stage="stage3"
+          onClose={() => setMemoLinkTarget(null)}
+          onCellChange={handleCellChange}
+          onColorChange={handleColorChange}
+          suggestions={suggestions}
+        />
+      )}
     </div>
   );
 }

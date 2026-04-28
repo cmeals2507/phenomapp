@@ -64,6 +64,18 @@ function initSchema(db) {
       key   TEXT PRIMARY KEY,
       value TEXT NOT NULL
     );
+
+    CREATE TABLE IF NOT EXISTS memo_mu_links (
+      id            INTEGER PRIMARY KEY AUTOINCREMENT,
+      transcript_id INTEGER NOT NULL,
+      mu_id         INTEGER NOT NULL,
+      memo_start    INTEGER NOT NULL,
+      memo_end      INTEGER NOT NULL,
+      memo_excerpt  TEXT NOT NULL,
+      created_at    DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (transcript_id) REFERENCES transcripts(id),
+      FOREIGN KEY (mu_id) REFERENCES meaning_units(id)
+    );
   `);
 
   // Migration: add new columns to existing databases.

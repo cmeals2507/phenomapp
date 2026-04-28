@@ -314,6 +314,30 @@ function registerIPC() {
     return queries.getReorderLog(transcriptId);
   });
 
+  // --- Memo ↔ MU links ---
+
+  ipcMain.handle('memo-links:getAll', (event, transcriptId) => {
+    return queries.getMemoLinks(transcriptId);
+  });
+
+  ipcMain.handle('memo-links:add', (event, { transcriptId, muId, memoStart, memoEnd, memoExcerpt }) => {
+    try {
+      const result = queries.addMemoLink({ transcriptId, muId, memoStart, memoEnd, memoExcerpt });
+      return { success: true, id: result.id };
+    } catch (err) {
+      return { error: err.message };
+    }
+  });
+
+  ipcMain.handle('memo-links:delete', (event, id) => {
+    try {
+      queries.deleteMemoLink(id);
+      return { success: true };
+    } catch (err) {
+      return { error: err.message };
+    }
+  });
+
   // --- Project meta ---
 
   ipcMain.handle('project:getPositionality', () => {
@@ -349,6 +373,30 @@ function registerIPC() {
     if (result.canceled) return { canceled: true };
 
     try {
+      fs.writeFileSync(result.filePath, content, 'utf-8');
+      return { success: true };
+    } catch (err) {
+      return { error: err.message };
+    }
+  });
+
+  ipcMain.handle('export:corpusJson', async () => {
+    const { formatCorpusJson } = require('./src/utils/exportFormatters');
+
+    const result = await dialog.showSaveDialog(mainWindow, {
+      defaultPath: 'corpus_llm_export.json',
+      filters: [{ name: 'JSON Files', extensions: ['json'] }],
+    });
+
+    if (result.canceled) return { canceled: true };
+
+    try {
+      const allTranscripts = queries.getAllTranscriptsForCorpus();
+      const allStageOutputs = queries.getAllStageOutputsForCorpus();
+      const allMeaningUnits = queries.getAllMeaningUnitsForCorpus();
+      const positionality = queries.getPositionality();
+
+      const content = formatCorpusJson(allTranscripts, allStageOutputs, allMeaningUnits, positionality, currentDbPath);
       fs.writeFileSync(result.filePath, content, 'utf-8');
       return { success: true };
     } catch (err) {

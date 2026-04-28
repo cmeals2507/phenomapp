@@ -265,13 +265,16 @@ const CASE_SENSITIVE_NOTE = (
 // ---------------------------------------------------------------------------
 // Memoized row — only re-renders when its own unit data or suggestions change
 // ---------------------------------------------------------------------------
-const ThemeTaggingRow = memo(function ThemeTaggingRow({ unit, suggestions, onCellChange, onColorChange }) {
+const ThemeTaggingRow = memo(function ThemeTaggingRow({ unit, suggestions, onCellChange, onColorChange, onOpenModal }) {
   // Amber indicator: theme + color set but thematic interpretation missing → highlight is blocked
   const needsInterpretation = Boolean(
     unit.provisional_theme?.trim() &&
     unit.theme_color &&
     !unit.thematic_interpretation?.trim()
   );
+
+  // Earned dot for Stage 3: green when provisional_theme + thematic_interpretation both filled
+  const isEarned = Boolean(unit.provisional_theme?.trim() && unit.thematic_interpretation?.trim());
 
   // Set textarea heights on mount only. onChange handles resize during typing.
   // Using useLayoutEffect (not a ref callback) prevents forced layout on every render.
@@ -290,12 +293,29 @@ const ThemeTaggingRow = memo(function ThemeTaggingRow({ unit, suggestions, onCel
       className="align-top hover:bg-gray-50"
       style={unit.theme_color ? { borderLeft: `3px solid ${unit.theme_color}` } : {}}
     >
-      <td
-        className="p-2 border border-gray-200 font-mono text-center align-top select-none cursor-pointer text-gray-400 hover:text-indigo-500 hover:bg-indigo-50 transition-colors"
-        title={unit.excerpt ? 'Click to locate in transcript' : undefined}
-        onClick={() => dispatchScrollToMU(unit.excerpt)}
-      >
-        {formatMUId(unit.mu_order)}
+      <td className="p-2 border border-gray-200 text-center align-top select-none">
+        <div className="flex flex-col items-center gap-1.5">
+          <span
+            className="font-mono text-xs text-gray-400 cursor-pointer hover:text-indigo-500 hover:bg-indigo-50 transition-colors rounded px-0.5"
+            title={unit.excerpt ? 'Click to locate in transcript' : undefined}
+            onClick={() => dispatchScrollToMU(unit.excerpt)}
+          >
+            {formatMUId(unit.mu_order)}
+          </span>
+          <button
+            onClick={() => onOpenModal(unit.id, unit.mu_order)}
+            className={`w-2.5 h-2.5 rounded-full transition-colors ${
+              isEarned
+                ? 'bg-green-500 hover:bg-green-600'
+                : 'bg-orange-400 hover:bg-orange-500'
+            }`}
+            title={
+              isEarned
+                ? 'Theme highlight earned. Click to review.'
+                : 'Theme + interpretation required to earn highlight. Click to fill in.'
+            }
+          />
+        </div>
       </td>
 
       <td className="p-2 border border-gray-200 text-gray-700 leading-relaxed">
@@ -376,7 +396,7 @@ const ThemeTaggingRow = memo(function ThemeTaggingRow({ unit, suggestions, onCel
   );
 });
 
-export default function ThemeTaggingView({ units, suggestions, onCellChange, onColorChange, panelSearch }) {
+export default function ThemeTaggingView({ units, suggestions, onCellChange, onColorChange, onOpenModal, panelSearch }) {
   const [filterValue, setFilterValue] = useState('all');
   const [sortValue, setSortValue] = useState('original');
 
@@ -496,6 +516,7 @@ export default function ThemeTaggingView({ units, suggestions, onCellChange, onC
                 suggestions={suggestions}
                 onCellChange={onCellChange}
                 onColorChange={onColorChange}
+                onOpenModal={onOpenModal}
               />
             ))}
           </tbody>

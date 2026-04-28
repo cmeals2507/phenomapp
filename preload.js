@@ -26,11 +26,16 @@ contextBridge.exposeInMainWorld('phenomAPI', {
   updateReorderLogNote: (data) => ipcRenderer.invoke('meaning-units:updateReorderNote', data),
   getReorderLog: (transcriptId) => ipcRenderer.invoke('meaning-units:getReorderLog', transcriptId),
 
+  getMemoLinks: (transcriptId) => ipcRenderer.invoke('memo-links:getAll', transcriptId),
+  addMemoLink: (data) => ipcRenderer.invoke('memo-links:add', data),
+  deleteMemoLink: (id) => ipcRenderer.invoke('memo-links:delete', id),
+
   getPositionality: () => ipcRenderer.invoke('project:getPositionality'),
   savePositionality: (text) => ipcRenderer.invoke('project:savePositionality', text),
 
   exportSingleCase: (transcriptId) => ipcRenderer.invoke('export:singleCase', transcriptId),
   exportCorpus: () => ipcRenderer.invoke('export:corpus'),
+  exportCorpusJson: () => ipcRenderer.invoke('export:corpusJson'),
 
   dbGetPath: () => ipcRenderer.invoke('db:getPath'),
   dbGetDefaultPath: () => ipcRenderer.invoke('db:getDefaultPath'),

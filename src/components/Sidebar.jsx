@@ -22,7 +22,7 @@ function CompletionDots({ stages }) {
   );
 }
 
-export default function Sidebar({ transcripts, selectedId, onSelectCase, onImport, onDelete, onExportCorpus, onDbSwitch }) {
+export default function Sidebar({ transcripts, selectedId, onSelectCase, onImport, onDelete, onExportCorpus, onExportCorpusJson, onDbSwitch }) {
   const [showImport, setShowImport] = useState(false);
   const [showDb, setShowDb] = useState(false);
   const [showPositionality, setShowPositionality] = useState(false);
@@ -146,7 +146,13 @@ export default function Sidebar({ transcripts, selectedId, onSelectCase, onImpor
           onClick={onExportCorpus}
           className="w-full text-xs text-gray-500 hover:text-gray-900 hover:bg-gray-100 rounded px-2 py-1.5 transition-colors text-center"
         >
-          Export All (Corpus)
+          Export Corpus (CSV)
+        </button>
+        <button
+          onClick={onExportCorpusJson}
+          className="w-full text-xs text-gray-500 hover:text-gray-900 hover:bg-gray-100 rounded px-2 py-1.5 transition-colors text-center"
+        >
+          Export Corpus (LLM JSON)
         </button>
         <button
           onClick={() => setShowDb(true)}
