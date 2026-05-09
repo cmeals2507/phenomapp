@@ -148,6 +148,10 @@ export default function MemoLinkModal({
   const [pendingSelection, setPendingSelection] = useState(null);
   const memoRef = useRef(null);
 
+  // Memo search
+  const [memoSearch, setMemoSearch] = useState('');
+  const [matchIndex, setMatchIndex] = useState(0);
+
   // Local field state — initialized once from unit prop; parent is notified via onCellChange
   const [fields, setFields] = useState(() => ({
     boundary_justification: unit?.boundary_justification || '',
@@ -215,12 +219,41 @@ export default function MemoLinkModal({
     window.dispatchEvent(new CustomEvent('phenomapp:coverage-changed'));
   }, [loadLinks, onLinksChanged]);
 
+  // Compute search match ranges
+  const matchRanges = useMemo(() => {
+    if (!memoSearch.trim() || !memoContent) return [];
+    const q = memoSearch.toLowerCase();
+    const text = memoContent.toLowerCase();
+    const result = [];
+    let pos = 0;
+    while (pos < text.length) {
+      const idx = text.indexOf(q, pos);
+      if (idx === -1) break;
+      result.push({ start: idx, end: idx + q.length, type: 'match', matchIdx: result.length });
+      pos = idx + 1;
+    }
+    return result;
+  }, [memoSearch, memoContent]);
+
+  // Clamp matchIndex when result set changes
+  useEffect(() => {
+    setMatchIndex(i => matchRanges.length === 0 ? 0 : Math.min(i, matchRanges.length - 1));
+  }, [matchRanges.length]);
+
+  // Scroll current match into view
+  useEffect(() => {
+    if (!memoRef.current || matchRanges.length === 0) return;
+    const el = memoRef.current.querySelector(`[data-match="${matchIndex}"]`);
+    el?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+  }, [matchIndex, matchRanges.length]);
+
   const renderedMemo = useMemo(() => {
     if (!memoContent) return null;
     const ranges = [
       ...thisLinks.map(l => ({ start: l.memo_start, end: l.memo_end, type: 'this' })),
       ...otherLinks.map(l => ({ start: l.memo_start, end: l.memo_end, type: 'other', muOrder: l.mu_order })),
       ...(pendingSelection ? [{ start: pendingSelection.start, end: pendingSelection.end, type: 'pending' }] : []),
+      ...matchRanges,
     ];
     if (ranges.length === 0) return <span>{memoContent}</span>;
     const segments = splitIntoSegments(memoContent, ranges);
@@ -228,9 +261,14 @@ export default function MemoLinkModal({
       const hasPending = seg.active.some(r => r.type === 'pending');
       const hasThis = seg.active.some(r => r.type === 'this');
       const hasOther = seg.active.some(r => r.type === 'other');
+      const currentMatch = seg.active.find(r => r.type === 'match' && r.matchIdx === matchIndex);
+      const anyMatch = seg.active.find(r => r.type === 'match');
       let bg = '';
       let title = '';
-      if (hasPending) bg = '#bfdbfe';
+      // Search matches overlay other highlights when searching
+      if (currentMatch) bg = '#fde047';       // yellow-300 — current match
+      else if (anyMatch) bg = '#fef9c3';      // yellow-50 — other matches
+      else if (hasPending) bg = '#bfdbfe';
       else if (hasThis) bg = '#fed7aa';
       else if (hasOther) {
         bg = '#f3f4f6';
@@ -238,12 +276,17 @@ export default function MemoLinkModal({
         title = muOrders.map(formatMUId).join(', ');
       }
       return (
-        <span key={i} style={bg ? { backgroundColor: bg } : undefined} title={title || undefined}>
+        <span
+          key={i}
+          style={bg ? { backgroundColor: bg } : undefined}
+          title={title || undefined}
+          data-match={currentMatch ? currentMatch.matchIdx : anyMatch ? anyMatch.matchIdx : undefined}
+        >
           {seg.text}
         </span>
       );
     });
-  }, [memoContent, thisLinks, otherLinks, pendingSelection]);
+  }, [memoContent, thisLinks, otherLinks, pendingSelection, matchRanges, matchIndex]);
 
   const hasMemo = memoContent.trim().length > 0;
   const muLabel = formatMUId(muOrder);
@@ -391,9 +434,57 @@ export default function MemoLinkModal({
           <div className="flex flex-col flex-1 min-w-0 overflow-hidden">
 
             {/* Memo sub-header */}
-            <div className="px-4 py-2 border-b border-gray-100 bg-gray-50 shrink-0 flex items-center gap-4 flex-wrap">
-              <span className="text-xs font-medium text-gray-600">Holistic Memo</span>
-              <div className="flex items-center gap-3 text-xs text-gray-400">
+            <div className="px-4 py-2 border-b border-gray-100 bg-gray-50 shrink-0 flex items-center gap-3 flex-wrap">
+              <span className="text-xs font-medium text-gray-600 shrink-0">Holistic Memo</span>
+
+              {/* Search input */}
+              <div className="flex items-center gap-1.5 flex-1 min-w-0">
+                <div className="flex items-center gap-1 border border-gray-200 rounded px-1.5 bg-white">
+                  <svg className="w-3 h-3 text-gray-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-4.35-4.35M17 11A6 6 0 1 1 5 11a6 6 0 0 1 12 0z" />
+                  </svg>
+                  <input
+                    type="text"
+                    value={memoSearch}
+                    onChange={e => { setMemoSearch(e.target.value); setMatchIndex(0); }}
+                    onKeyDown={e => {
+                      if (e.key === 'Enter') setMatchIndex(i => matchRanges.length ? (i + 1) % matchRanges.length : 0);
+                      if (e.key === 'Escape') { setMemoSearch(''); setMatchIndex(0); }
+                    }}
+                    placeholder="Search memo…"
+                    className="text-xs py-0.5 focus:outline-none bg-transparent w-28"
+                  />
+                </div>
+                {memoSearch && (
+                  <span className="text-xs text-gray-400 shrink-0">
+                    {matchRanges.length === 0 ? 'No matches' : `${matchIndex + 1} / ${matchRanges.length}`}
+                  </span>
+                )}
+                {matchRanges.length > 1 && (
+                  <div className="flex items-center gap-0.5 shrink-0">
+                    <button
+                      onClick={() => setMatchIndex(i => (i - 1 + matchRanges.length) % matchRanges.length)}
+                      className="text-gray-400 hover:text-gray-600 px-1 py-0.5 rounded hover:bg-gray-200 text-xs leading-none"
+                      title="Previous match"
+                    >↑</button>
+                    <button
+                      onClick={() => setMatchIndex(i => (i + 1) % matchRanges.length)}
+                      className="text-gray-400 hover:text-gray-600 px-1 py-0.5 rounded hover:bg-gray-200 text-xs leading-none"
+                      title="Next match"
+                    >↓</button>
+                  </div>
+                )}
+                {memoSearch && (
+                  <button
+                    onClick={() => { setMemoSearch(''); setMatchIndex(0); }}
+                    className="text-gray-300 hover:text-gray-500 text-xs leading-none shrink-0"
+                    title="Clear search"
+                  >✕</button>
+                )}
+              </div>
+
+              {/* Highlight legend */}
+              <div className="flex items-center gap-3 text-xs text-gray-400 shrink-0">
                 {(thisLinks.length > 0 || stage === 'stage2') && (
                   <span className="flex items-center gap-1">
                     <span className="inline-block w-3 h-3 rounded-sm bg-orange-200" />
